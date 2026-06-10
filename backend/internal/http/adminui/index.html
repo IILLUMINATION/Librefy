@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Librefy admin</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">♪</span>
+      <span>Librefy admin</span>
+    </div>
+    <nav id="tabs">
+      <button data-tab="dashboard" class="active">Dashboard</button>
+      <button data-tab="tracks">Tracks</button>
+      <button data-tab="playlists">Playlists</button>
+      <button data-tab="import">Import / Export</button>
+    </nav>
+    <div class="spacer"></div>
+    <span id="connStatus" class="pill">disconnected</span>
+    <button id="logoutBtn" class="ghost">Sign out</button>
+  </header>
+
+  <main>
+    <!-- Token gate -->
+    <section id="loginCard" class="card hidden">
+      <h2>Sign in</h2>
+      <p class="muted">Paste the admin token configured on the server
+        (<code>LIBREFY_ADMIN_TOKEN</code>).</p>
+      <input id="tokenInput" type="password" placeholder="admin token" autocomplete="off" />
+      <button id="loginBtn" class="primary">Continue</button>
+      <p id="loginError" class="error hidden"></p>
+    </section>
+
+    <!-- Dashboard -->
+    <section id="dashboard" class="tab card">
+      <h2>Catalog at a glance</h2>
+      <div class="stats" id="statsGrid">…</div>
+      <p class="muted small">All operations write directly to SQLite. To
+        persist your changes back into the binary, use Export → commit
+        <code>seed/tracks.json</code> to git.</p>
+    </section>
+
+    <!-- Tracks -->
+    <section id="tracks" class="tab card hidden">
+      <div class="row between center">
+        <h2>Tracks</h2>
+        <button id="newTrackBtn" class="primary">+ New track</button>
+      </div>
+      <input id="trackSearch" placeholder="Filter by title or artist…" class="filter" />
+      <table id="tracksTable">
+        <thead>
+          <tr>
+            <th>Title</th><th>Artist</th><th>License</th><th>HTTP</th><th>P2P</th><th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Playlists -->
+    <section id="playlists" class="tab card hidden">
+      <div class="row between center">
+        <h2>Playlists</h2>
+        <button id="newPlaylistBtn" class="primary">+ New playlist</button>
+      </div>
+      <table id="playlistsTable">
+        <thead><tr><th>Title</th><th>Curated</th><th>Tracks</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Import / Export -->
+    <section id="import" class="tab card hidden">
+      <h2>Import / Export</h2>
+
+      <h3>Export</h3>
+      <p class="muted">Download the current catalog as <code>tracks.json</code>
+        — paste it into <code>backend/internal/db/seed/tracks.json</code>
+        to bake it into the next build.</p>
+      <button id="exportBtn" class="primary">Download tracks.json</button>
+
+      <h3>Bulk import</h3>
+      <p class="muted">Paste a JSON payload <code>{"tracks":[…]}</code>.
+        Existing IDs are overwritten.</p>
+      <textarea id="bulkText" rows="10" placeholder='{"tracks":[{"id":"…","title":"…",…}]}'></textarea>
+      <div class="row gap">
+        <button id="bulkBtn" class="primary">Import</button>
+        <span id="bulkResult" class="muted"></span>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal for create / edit -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <header class="row between center">
+        <h3 id="modalTitle">Edit</h3>
+        <button id="modalClose" class="ghost">✕</button>
+      </header>
+      <form id="modalForm"></form>
+    </div>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

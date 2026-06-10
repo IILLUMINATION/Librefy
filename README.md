@@ -2,57 +2,82 @@
 
 **Privacy-first, libre / free music streaming with peer-assisted delivery.**
 
-Librefy is an open-source music app inspired by Spotify but built around
-a totally different premise: only **legally redistributable** music
-(Creative Commons, CC0, public-domain, royalty-free, artist-released)
-is ever streamed by the official build. There are no ads, no tracking,
-no accounts, and the backend is intentionally tiny — heavy audio
-traffic is meant to be offloaded to peer-assisted (torrent / WebTorrent)
-delivery once the operator opts in.
+<p>
+  <img alt="status" src="https://img.shields.io/badge/status-MVP-orange">
+  <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-blue">
+  <img alt="backend" src="https://img.shields.io/badge/backend-Go%20%2B%20SQLite-00ADD8">
+  <img alt="app" src="https://img.shields.io/badge/app-Flutter%20(Android%20%2B%20Linux)-02569B">
+</p>
 
-> Librefy is **not** a piracy tool. The official catalog and the
-> reference build do **not** index commercial copyrighted material and
-> never will. Torrent is used purely as a delivery technology, not as a
-> content-sourcing technology. See [`docs/LEGAL.md`](docs/LEGAL.md).
+Librefy is an open-source music app inspired by Spotify but built around a
+very different premise: only **legally redistributable** music
+(Creative Commons, CC0, public-domain, royalty-free, artist-released)
+is ever streamed by the official build. There are **no ads, no tracking,
+no accounts**, and the backend is intentionally tiny — heavy audio traffic
+is meant to be offloaded to peer-assisted (torrent / WebTorrent) delivery
+once the operator opts in.
+
+> Librefy is **not** a piracy tool. The official catalog and the reference
+> build do **not** index commercial copyrighted material and never will.
+> Torrent is used purely as a delivery technology, not as a content-sourcing
+> technology. See [`docs/LEGAL.md`](docs/LEGAL.md).
+
+## Demo backend
+
+A small public catalog runs on `http://194.31.223.9:8088`. Release APK
+builds talk to it by default; you can swap to your own server any time
+from **Settings → Backend URL**, or follow the in-app guide to deploy
+your own in ~10 minutes.
+
+```bash
+curl http://194.31.223.9:8088/api/v1/health
+curl http://194.31.223.9:8088/api/v1/trending?limit=3
+```
+
+## Features (MVP)
+
+- 🎵 Stream Creative Commons / public-domain music with per-track licence display
+- 🎨 Material 3, dynamic colour, responsive (NavigationBar ↔ NavigationRail)
+- 🔍 Debounced search across the local catalog and the Internet Archive
+- 📱 Background playback, lock-screen controls (Android), system mediakit (Linux)
+- 🧩 Pluggable provider system (`MusicProvider` interface, mirrored backend/app)
+- 🌐 Torrent abstraction layer ready for libtorrent / WebTorrent
+- 🛠️ Built-in admin web UI for managing tracks & playlists
+- 🔒 Privacy-first: no accounts, no telemetry, anonymous-only play counters
 
 ## Repository layout
 
 ```
 Librefy/
-├── backend/        # Go service (REST API, SQLite, providers)
-├── app/            # Flutter app (Android + Linux desktop)
-├── docs/           # Architecture & legal notes
-└── scripts/        # Convenience scripts
+├── backend/         # Go service (REST API, SQLite, providers, admin UI)
+├── app/             # Flutter app (Android + Linux desktop)
+├── docs/            # ARCHITECTURE, LEGAL, DEPLOY
+├── scripts/         # run-backend.sh, run-app-linux.sh, deploy.sh
+└── .vscode/         # tasks & extension recommendations
 ```
 
-## Quick start
+## Quick start (development)
 
-### 1. Backend
+### Backend
 
 ```bash
 ./scripts/run-backend.sh
-# listens on :8080, seeds SQLite from the embedded catalog on first run
+# Listens on :8080 with the embedded libre catalog already loaded.
 ```
 
-Inside VS Code: `Ctrl+Shift+B` runs the same task (see `.vscode/tasks.json`).
+VS Code: `Ctrl+Shift+B` runs the same task (see `.vscode/tasks.json`).
 
-Smoke-test:
+### Flutter app — Linux
 
 ```bash
-curl http://localhost:8080/api/v1/health
-curl http://localhost:8080/api/v1/featured
-curl "http://localhost:8080/api/v1/search?q=cipher"
+./scripts/run-app-linux.sh
 ```
 
-### 2. App — Linux desktop
+> First run will offer to install `libmpv` automatically (the only native
+> dependency on Linux). You can also pre-install it once with
+> `./scripts/setup.sh` — Android builds need nothing extra.
 
-```bash
-cd app
-flutter pub get
-flutter run -d linux
-```
-
-### 3. App — Android
+### Flutter app — Android
 
 ```bash
 cd app
@@ -60,53 +85,84 @@ flutter pub get
 flutter run -d <your-device-or-emulator>
 ```
 
-> On the Android emulator, the app talks to your host machine via
-> `http://10.0.2.2:8080` automatically (see `lib/core/network/api_config.dart`).
+> Android emulator → `http://10.0.2.2:8080` is used automatically.
 
-## What's in the MVP
+## Admin web UI
 
-- Go backend (chi + SQLite) with metadata, search, playlists, license info, anonymous play counters.
-- Built-in **Catalog** provider (curated libre tracks seeded from `backend/seed/tracks.json`).
-- Built-in **Internet Archive** provider (libre-only filter on `archive.org`).
-- Flutter app with Material 3, dynamic colour, navigation rail on desktop.
-- `just_audio` playback with queue, background notifications, lockscreen controls (Android).
-- On-device "Recently played" (privacy-first, never sent to the backend).
-- `TorrentService` abstraction with a safe `HttpOnlyTorrentService` default. Wire libtorrent / WebTorrent in later without touching the player.
+The backend ships with a small built-in admin panel. **It stays disabled
+until you set a token** — that's the safe default for a fresh deploy.
+
+```bash
+LIBREFY_ADMIN_TOKEN=$(openssl rand -hex 32) ./scripts/run-backend.sh
+# Open http://localhost:8080/admin/ and paste the token.
+```
+
+Features:
+
+- Add / edit / delete tracks with full licence metadata, magnet URI,
+  attribution, tags
+- Manage curated playlists & ordering
+- Bulk JSON import / export (round-trip with `seed/tracks.json`)
+- Lightweight stats dashboard
+
+## Deploying your own backend on a VPS
+
+Either follow the **in-app guide** (Settings → "Deploy your own backend",
+copy-buttoned step-by-step) or the [`docs/DEPLOY.md`](docs/DEPLOY.md)
+walkthrough. Short version:
+
+```bash
+# 1. Build a static binary
+cd backend
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go build -ldflags="-s -w" -o librefyd ./cmd/librefyd
+
+# 2. Ship it
+scp librefyd root@YOUR_VPS:/opt/librefy/
+
+# 3. Run as systemd service (see docs/DEPLOY.md for the unit file)
+```
+
+Or use the helper:
+
+```bash
+VPS=root@YOUR_VPS ./scripts/deploy.sh
+```
 
 ## Troubleshooting
 
-### Home screen shows no tracks / "Catalog is empty"
+### "Catalog is empty" on Home
 
-1. Make sure the backend is running and listening on the expected URL
-   (default `http://127.0.0.1:8080`).
-2. Hit `http://127.0.0.1:8080/api/v1/trending` in your browser. You should
-   see a JSON payload with a `"tracks": [...]` array.
-3. If the array is empty, your `librefy.db` was created before the embedded
-   seed was wired in. Delete it and restart the backend:
+1. Make sure `librefyd` is running and listening on the URL the app is
+   pointed at (default `http://127.0.0.1:8080`).
+2. Hit `http://127.0.0.1:8080/api/v1/trending` in your browser; you
+   should see JSON with `"tracks": [...]`.
+3. If the array is empty your local SQLite DB pre-dates the embedded
+   seed. Wipe it via the VS Code task **"Librefy: Reset DB"** or:
 
    ```bash
-   # macOS/Linux — wipe any stale DB anywhere in the repo
    find . -maxdepth 4 -name 'librefy.db*' -delete
    ./scripts/run-backend.sh
    ```
 
-   The VS Code task **"Librefy: Reset DB"** does the same.
-4. In the app, tap **Retry** on the empty-catalog card or restart.
+4. In the app, tap **Retry** on the empty-catalog card, or restart.
 
-### Backend uses the wrong base URL
+### Pointing the app at a different backend
 
-Set it at build time:
-
-```bash
-flutter run -d linux --dart-define=LIBREFY_API=http://your.host:8080
-```
+- **At runtime:** Settings → Backend URL → Apply.
+- **At build time:** `flutter run --dart-define=LIBREFY_API=http://your.host:8088`
 
 ## Roadmap (not in MVP)
 
-- libtorrent FFI integration (progressive streaming, fallback to HTTP).
-- On-disk audio LRU cache wired into `just_audio` (data plane already in `lib/application/cache`).
-- User playlists, sync (opt-in).
-- External provider plugins.
+- libtorrent FFI (progressive streaming, fallback to HTTP)
+- `LockCachingAudioSource` wiring into `AudioCache` (data plane already done)
+- User playlists (device-local, opt-in sync)
+- Provider plugin loader
+
+## Contributing
+
+PRs welcome — please read [`docs/LEGAL.md`](docs/LEGAL.md) first.
+Any provider PR must surface only verifiably libre content.
 
 ## Licensing
 

@@ -97,6 +97,8 @@ The same shape is mirrored in the Flutter `domain/providers/music_provider.dart`
 
 ### REST API (v1)
 
+**Public** (no auth):
+
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET  | `/api/v1/health` | service health |
@@ -107,6 +109,25 @@ The same shape is mirrored in the Flutter `domain/providers/music_provider.dart`
 | GET  | `/api/v1/tracks/{id}/stream` | resolve to HTTP + magnet |
 | POST | `/api/v1/tracks/{id}/play` | anonymous play counter |
 | GET  | `/api/v1/playlists/{id}` | playlist + tracks |
+
+**Admin** (requires `X-Admin-Token` / `Authorization: Bearer` / `?token=`
+matching `LIBREFY_ADMIN_TOKEN`; if the env var is unset, the whole
+`/admin/*` tree returns 404):
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET    | `/admin/`                    | redirect to web UI |
+| GET    | `/admin/index.html`          | embedded admin SPA |
+| GET    | `/admin/v1/ping`             | token check |
+| GET    | `/admin/v1/stats`            | dashboard counters |
+| GET    | `/admin/v1/tracks`           | list all tracks (paginated) |
+| POST   | `/admin/v1/tracks`           | upsert one track |
+| POST   | `/admin/v1/tracks/bulk`      | bulk import |
+| DELETE | `/admin/v1/tracks/{id}`      | remove track |
+| GET    | `/admin/v1/playlists`        | list all playlists |
+| POST   | `/admin/v1/playlists`        | upsert (incl. track order) |
+| DELETE | `/admin/v1/playlists/{id}`   | remove playlist |
+| GET    | `/admin/v1/seed/export`      | download `tracks.json` |
 
 ### Database schema
 

@@ -45,6 +45,14 @@
       ]
     },
     {
+      "label": "Librefy: Setup (install libmpv)",
+      "type": "shell",
+      "command": "./scripts/setup.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
       "label": "Librefy: Run app (Linux)",
       "type": "shell",
       "command": "./scripts/run-app-linux.sh",
@@ -107,6 +115,22 @@
       "command": "flutter analyze",
       "options": { "cwd": "${workspaceFolder}/app" },
       "problemMatcher": []
+    },
+    {
+      "label": "Librefy: Deploy backend to VPS",
+      "type": "shell",
+      "command": "VPS=${input:vpsHost} ./scripts/deploy.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "vpsHost",
+      "type": "promptString",
+      "description": "VPS host (user@host)",
+      "default": "root@194.31.223.9"
     }
   ]
 }

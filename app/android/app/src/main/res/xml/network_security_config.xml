@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Librefy network security configuration.
+
+    Default: cleartext HTTP is FORBIDDEN. Always prefer HTTPS.
+
+    Exceptions:
+      - The Librefy demo backend on 194.31.223.9 is plain HTTP because
+        it runs on a domain-less VPS. Anyone hosting their own backend
+        on HTTPS does not need this exception.
+      - Private RFC1918 ranges are allowed so users can talk to a
+        librefyd running on their LAN / Android emulator without TLS.
+      - just_audio also fetches the *upstream* HTTP origins of CC tracks
+        (incompetech.com, scottbuckley.com.au, bensound.com); those are
+        HTTPS already, so no extra exception is needed.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">194.31.223.9</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>      <!-- Android emulator host -->
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <!-- Common LAN ranges so a backend at e.g. 192.168.1.10 just works. -->
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">192.168.1.0</domain>
+        <domain includeSubdomains="true">10.0.0.0</domain>
+    </domain-config>
+</network-security-config>

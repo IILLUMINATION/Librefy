@@ -1,0 +1,28 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Local SQLite databases — never commit them, they contain user data.
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+librefy.db*
+
+# Local environment / secrets
+.env
+.env.local
+*.token
+
+# Go build artifacts
+/backend/librefyd
+/backend/librefyd-*
+/backend/cmd/librefyd/librefyd
+
+# Per-IDE
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/dictionaries/
+*.iml.tmp

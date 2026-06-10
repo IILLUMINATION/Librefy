@@ -13,6 +13,7 @@ import '../../presentation/library/library_screen.dart';
 import '../../presentation/library/playlist_detail_screen.dart';
 import '../../presentation/player/now_playing_screen.dart';
 import '../../presentation/search/search_screen.dart';
+import '../../presentation/settings/deploy_guide_screen.dart';
 import '../../presentation/settings/settings_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -37,6 +38,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/now-playing',
         builder: (_, __) => const NowPlayingScreen(),
+      ),
+      GoRoute(
+        path: '/settings/deploy',
+        builder: (_, __) => const DeployGuideScreen(),
       ),
     ],
   );

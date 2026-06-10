@@ -11,8 +11,11 @@ import '../../domain/entities/search_result.dart';
 import '../../domain/entities/track.dart';
 import '../../domain/repositories/catalog_repository.dart';
 
-/// API base URL — overridable for tests / settings screen.
-final apiBaseUrlProvider = Provider<String>((ref) => ApiConfig.defaultBaseUrl());
+/// API base URL — the user can override it from Settings at runtime.
+/// We seed it with the build-time default (Android emulator host on
+/// Android, 127.0.0.1 elsewhere; see ApiConfig).
+final apiBaseUrlProvider =
+    StateProvider<String>((ref) => ApiConfig.defaultBaseUrl());
 
 final _apiProvider = Provider<LibrefyApi>((ref) {
   final base = ref.watch(apiBaseUrlProvider);

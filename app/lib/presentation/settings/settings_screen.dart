@@ -1,6 +1,11 @@
-// Settings — minimal MVP surface: backend URL, cache controls, about.
+// Settings — minimal MVP surface:
+//   - Backend URL (live-editable, applied immediately by invalidating
+//     the API client provider through Riverpod's StateProvider).
+//   - Pointer to the in-app self-hosting guide.
+//   - About / licensing notice.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../application/state/providers.dart';
 
@@ -25,8 +30,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.dispose();
   }
 
+  void _applyUrl() {
+    final v = _urlCtrl.text.trim();
+    if (v.isEmpty) return;
+    ref.read(apiBaseUrlProvider.notifier).state = v;
+    // Drop cached repository / API client so the next fetch goes to the
+    // new origin.
+    ref.invalidate(catalogRepositoryProvider);
+    ref.invalidate(featuredPlaylistsProvider);
+    ref.invalidate(trendingTracksProvider);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Backend URL set to $v')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return CustomScrollView(
       slivers: [
         const SliverAppBar.medium(title: Text('Settings')),
@@ -39,23 +59,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: TextField(
-                controller: _urlCtrl,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'librefyd base URL',
-                ),
-                onSubmitted: (v) {
-                  // apiBaseUrlProvider is a plain Provider in MVP: we surface
-                  // the value to the user but persistence + hot-swap arrives
-                  // in v0.2 together with a settings_repository.
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Restart the app to apply the new URL.'),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _urlCtrl,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'librefyd base URL',
+                        hintText: 'http://192.168.1.10:8088',
+                      ),
+                      onSubmitted: (_) => _applyUrl(),
                     ),
-                  );
-                },
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.tonal(
+                    onPressed: _applyUrl,
+                    child: const Text('Apply'),
+                  ),
+                ],
               ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_upload_outlined),
+              title: const Text('Deploy your own backend'),
+              subtitle: const Text(
+                'Run librefyd on a VPS in ~10 minutes.',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => context.push('/settings/deploy'),
             ),
             const Divider(),
             const ListTile(
@@ -66,12 +98,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 'Catalog limited to Creative Commons / public-domain content.',
               ),
             ),
-            const ListTile(
-              leading: Icon(Icons.policy_outlined),
-              title: Text('Licensing'),
+            ListTile(
+              leading: const Icon(Icons.policy_outlined),
+              title: const Text('Licensing'),
               subtitle: Text(
                 'Each track displays its licence. Tracks without a verified '
                 'libre licence are not surfaced by the official catalog.',
+                style: TextStyle(color: scheme.onSurfaceVariant),
               ),
             ),
           ]),

@@ -20,14 +20,15 @@ dependencies:
   # Networking
   dio: ^5.5.0
 
-  # Audio
-  just_audio: ^0.9.39
-  just_audio_background: ^0.0.1-beta.13
-  audio_session: ^0.1.21
+  # Audio — media_kit is used directly (cross-platform: Android, iOS,
+  # Linux, Windows, macOS). It ships its own libmpv binaries via
+  # media_kit_libs_*, so end-users do NOT need to apt-install anything.
+  # Background playback / lock-screen controls (Android) come in v0.2
+  # via audio_service; out of MVP scope here.
+  media_kit: ^1.1.11
+  media_kit_libs_audio: ^1.0.5            # picks the right libs per platform
 
-  # On-disk cache for streamed audio + metadata
-  just_audio_media_kit: ^2.0.4   # Linux desktop backend for just_audio
-  media_kit_libs_linux: ^1.1.3
+  # Filesystem
   path_provider: ^2.1.4
   shared_preferences: ^2.3.2
 

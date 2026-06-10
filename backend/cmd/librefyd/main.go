@@ -68,7 +68,12 @@ func main() {
 
 	svc := service.New(registry, database)
 
-	router := httpapi.NewRouter(svc, logger)
+	router := httpapi.NewRouter(svc, logger, cfg.AdminToken)
+	if cfg.AdminToken == "" {
+		logger.Info("admin API disabled (set LIBREFY_ADMIN_TOKEN to enable /admin)")
+	} else {
+		logger.Info("admin API enabled (token configured)")
+	}
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,

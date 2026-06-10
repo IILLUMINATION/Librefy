@@ -50,7 +50,7 @@ class HomeScreen extends ConsumerWidget {
           ),
           SliverToBoxAdapter(
             child: SizedBox(
-              height: 200,
+              height: 210,
               child: featured.when(
                 data: (pls) => _PlaylistRow(playlists: pls),
                 error: (e, _) => _ErrorTile(message: e.toString()),
@@ -64,7 +64,7 @@ class HomeScreen extends ConsumerWidget {
             ),
             SliverToBoxAdapter(
               child: SizedBox(
-                height: 200,
+                height: 190,
                 child: _RecentRow(tracks: recent),
               ),
             ),
@@ -121,23 +121,36 @@ class _PlaylistRow extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(width: 12),
       itemBuilder: (context, i) {
         final p = playlists[i];
+        // Card width matches artwork; text area is constrained to the
+        // remaining height so 1-line title + 1-line description always
+        // fit in the 200dp row (preventing the 4px overflow we used to
+        // hit at certain font scales).
         return SizedBox(
-          width: 160,
+          width: 140,
           child: InkWell(
             borderRadius: const BorderRadius.all(Radius.circular(12)),
             onTap: () => context.push('/playlist/${Uri.encodeComponent(p.id)}'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Artwork(url: p.artworkUrl, size: 160, radius: 12),
-                const SizedBox(height: 8),
-                Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall),
-                if (p.description != null)
-                  Text(p.description!, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          )),
+                Artwork(url: p.artworkUrl, size: 140, radius: 12),
+                const SizedBox(height: 6),
+                Text(
+                  p.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                if (p.description != null && p.description!.isNotEmpty)
+                  Text(
+                    p.description!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
               ],
             ),
           ),
@@ -160,7 +173,7 @@ class _RecentRow extends ConsumerWidget {
       itemBuilder: (context, i) {
         final t = tracks[i];
         return SizedBox(
-          width: 140,
+          width: 120,
           child: InkWell(
             borderRadius: const BorderRadius.all(Radius.circular(8)),
             onTap: () {
@@ -168,15 +181,24 @@ class _RecentRow extends ConsumerWidget {
             },
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Artwork(url: t.artworkUrl, size: 140, radius: 12),
-                const SizedBox(height: 8),
-                Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall),
-                Text(t.artist, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        )),
+                Artwork(url: t.artworkUrl, size: 120, radius: 12),
+                const SizedBox(height: 6),
+                Text(
+                  t.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                Text(
+                  t.artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
               ],
             ),
           ),

@@ -17,16 +17,27 @@ type Config struct {
 	// SeedPath is the path to a JSON file that seeds the catalog
 	// when the database is empty. May be empty to disable seeding.
 	SeedPath string
+	// AdminToken protects the /admin/* surface. If empty, the admin API
+	// (including the embedded web UI) is fully disabled. This is the
+	// safe default: a freshly-deployed binary exposes nothing privileged
+	// until the operator explicitly opts in.
+	AdminToken string
+	// PublicURL is an optional hint shown in the admin UI and the
+	// in-app deploy guide so users can copy a working URL. It does not
+	// affect routing.
+	PublicURL string
 }
 
 // Load reads configuration from environment variables.
 func Load() (*Config, error) {
 	cfg := &Config{
-		Addr:     getenv("LIBREFY_ADDR", ":8080"),
-		DBPath:   getenv("LIBREFY_DB", defaultDBPath()),
+		Addr:   getenv("LIBREFY_ADDR", ":8080"),
+		DBPath: getenv("LIBREFY_DB", defaultDBPath()),
 		// Empty by default ⇒ use the seed embedded into the binary.
 		// Set LIBREFY_SEED=/path/to/tracks.json to override at runtime.
-		SeedPath: os.Getenv("LIBREFY_SEED"),
+		SeedPath:   os.Getenv("LIBREFY_SEED"),
+		AdminToken: os.Getenv("LIBREFY_ADMIN_TOKEN"),
+		PublicURL:  os.Getenv("LIBREFY_PUBLIC_URL"),
 	}
 	return cfg, nil
 }

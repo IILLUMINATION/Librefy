@@ -1,26 +1,33 @@
-// AudioPlayerService wraps just_audio with a Librefy-specific queue and
-// source-resolution flow. The widget tree never instantiates a
-// JustAudioPlayer directly — it talks to this service through Riverpod.
+// AudioPlayerService — thin wrapper around media_kit's Player.
 //
-// Responsibilities:
+// Why media_kit (and not just_audio):
+//   - media_kit ships its own libmpv binaries through media_kit_libs_*,
+//     so a fresh user does NOT have to `apt install libmpv-dev` to make
+//     the app work. Out-of-the-box experience matters more than any
+//     individual feature.
+//   - It supports the same set of platforms we care about (Android,
+//     iOS, Linux, Windows, macOS) with a unified API.
+//
+// Responsibilities of this class:
 //   - Maintain the playback queue and current index.
-//   - Resolve each track's [StreamInfo] just-in-time and feed the right
-//     URI to just_audio (P2P-or-HTTP via [SourceResolver]).
-//   - Surface a unified [PlaybackState] for the UI.
+//   - Resolve each track's StreamInfo just-in-time and feed the right
+//     URI to the player (P2P-or-HTTP via SourceResolver).
+//   - Surface a unified PlaybackSnapshot for the UI.
 //   - Record anonymous play events through the repository.
 //
-// Background playback (lockscreen / notification) is wired up at the
-// app entry point via `just_audio_background`.
+// Background / lock-screen integration is a v0.2 concern (audio_service);
+// MVP just needs solid in-app playback.
 import 'dart:async';
 
-import 'package:just_audio/just_audio.dart';
+// Hide media_kit's `Track` to avoid clashing with domain.Track.
+import 'package:media_kit/media_kit.dart' hide Track;
 
 import '../../domain/entities/track.dart';
 import '../../domain/repositories/catalog_repository.dart';
 import '../torrent/source_resolver.dart';
 
 /// Snapshot of player state, kept transport-agnostic so the UI does
-/// not need to import just_audio.
+/// not need to import media_kit.
 class PlaybackSnapshot {
   const PlaybackSnapshot({
     required this.queue,
@@ -77,16 +84,17 @@ class AudioPlayerService {
   AudioPlayerService({
     required CatalogRepository repository,
     required SourceResolver resolver,
-    AudioPlayer? player,
+    Player? player,
   })  : _repo = repository,
         _resolver = resolver,
-        _player = player ?? AudioPlayer() {
+        _player = player ?? Player() {
     _wirePlayerEvents();
   }
 
   final CatalogRepository _repo;
   final SourceResolver _resolver;
-  final AudioPlayer _player;
+  final Player _player;
+  final List<StreamSubscription<dynamic>> _subs = [];
 
   final _snapshotCtrl = StreamController<PlaybackSnapshot>.broadcast();
   PlaybackSnapshot _snap = PlaybackSnapshot.empty;
@@ -94,9 +102,7 @@ class AudioPlayerService {
   Stream<PlaybackSnapshot> get snapshots => _snapshotCtrl.stream;
   PlaybackSnapshot get current => _snap;
 
-  Future<void> playTrack(Track track) async {
-    await playQueue([track], startIndex: 0);
-  }
+  Future<void> playTrack(Track track) => playQueue([track], startIndex: 0);
 
   /// Replace the queue and start playback at [startIndex].
   Future<void> playQueue(List<Track> queue, {int startIndex = 0}) async {
@@ -125,7 +131,7 @@ class AudioPlayerService {
   }
 
   Future<void> togglePlay() async {
-    if (_player.playing) {
+    if (_player.state.playing) {
       await _player.pause();
     } else {
       await _player.play();
@@ -135,6 +141,9 @@ class AudioPlayerService {
   Future<void> seek(Duration to) => _player.seek(to);
 
   Future<void> dispose() async {
+    for (final s in _subs) {
+      await s.cancel();
+    }
     await _player.dispose();
     await _snapshotCtrl.close();
   }
@@ -146,25 +155,28 @@ class AudioPlayerService {
     final info = await _repo.resolveStream(track.id);
     final resolved = await _resolver.resolve(info);
 
-    await _player.setAudioSource(AudioSource.uri(resolved.uri));
+    await _player.open(Media(resolved.uri.toString()));
     _emit(_snap.copyWith(usingP2P: resolved.usingP2P));
 
     unawaited(_repo.recordPlay(track.id));
-    await _player.play();
   }
 
   void _wirePlayerEvents() {
-    _player.playerStateStream.listen((s) {
-      _emit(_snap.copyWith(playing: s.playing));
-      if (s.processingState == ProcessingState.completed) {
-        unawaited(next());
-      }
-    });
-    _player.positionStream.listen((p) => _emit(_snap.copyWith(position: p)));
-    _player.bufferedPositionStream
-        .listen((b) => _emit(_snap.copyWith(bufferedPosition: b)));
-    _player.durationStream
-        .listen((d) => _emit(_snap.copyWith(duration: d ?? Duration.zero)));
+    _subs.add(_player.stream.playing.listen((p) {
+      _emit(_snap.copyWith(playing: p));
+    }));
+    _subs.add(_player.stream.position.listen((p) {
+      _emit(_snap.copyWith(position: p));
+    }));
+    _subs.add(_player.stream.duration.listen((d) {
+      _emit(_snap.copyWith(duration: d));
+    }));
+    _subs.add(_player.stream.buffer.listen((b) {
+      _emit(_snap.copyWith(bufferedPosition: b));
+    }));
+    _subs.add(_player.stream.completed.listen((done) {
+      if (done) unawaited(next());
+    }));
   }
 
   void _emit(PlaybackSnapshot s) {

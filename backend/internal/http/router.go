@@ -31,7 +31,8 @@ import (
 )
 
 // NewRouter builds the full chi router for the API.
-func NewRouter(svc *service.Service, logger *slog.Logger) http.Handler {
+// adminToken protects the /admin/* surface; pass "" to fully disable it.
+func NewRouter(svc *service.Service, logger *slog.Logger, adminToken string) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -42,8 +43,8 @@ func NewRouter(svc *service.Service, logger *slog.Logger) http.Handler {
 	// behind a reverse proxy if you self-host with stricter requirements.
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders: []string{"Accept", "Content-Type"},
+		AllowedMethods: []string{"GET", "POST", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Accept", "Content-Type", "Authorization", "X-Admin-Token"},
 		MaxAge:         300,
 	}))
 
@@ -59,6 +60,8 @@ func NewRouter(svc *service.Service, logger *slog.Logger) http.Handler {
 		r.Post("/tracks/{id}/play", h.recordPlay)
 		r.Get("/playlists/{id}", h.getPlaylist)
 	})
+
+	mountAdmin(r, svc, adminToken)
 
 	return r
 }
