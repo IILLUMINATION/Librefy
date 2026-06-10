@@ -1,0 +1,112 @@
+{
+  // Librefy VS Code tasks.
+  //
+  // Bind these to keyboard shortcuts via "Preferences: Open Keyboard Shortcuts (JSON)" if you like.
+  //   - Default build (Ctrl+Shift+B) ⇒ "Librefy: Run backend"
+  //   - "Tasks: Run Task" picker (Ctrl+Shift+P) lists everything below.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Librefy: Run backend",
+      "type": "shell",
+      "command": "./scripts/run-backend.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", "isDefault": true },
+      "isBackground": true,
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": false,
+        "group": "librefy"
+      },
+      "problemMatcher": [
+        {
+          // Treat the backend as continuously running: a generic
+          // background matcher that never finishes is enough for VS Code
+          // to keep the task "alive" without trying to parse compiler errors.
+          "owner": "go",
+          "pattern": [
+            {
+              "regexp": "^.*$",
+              "file": 1,
+              "location": 2,
+              "message": 3
+            }
+          ],
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "librefyd listening",
+            "endsPattern": "librefyd listening"
+          }
+        }
+      ]
+    },
+    {
+      "label": "Librefy: Run app (Linux)",
+      "type": "shell",
+      "command": "./scripts/run-app-linux.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": false,
+        "group": "librefy"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Librefy: Run app (Android)",
+      "type": "shell",
+      "command": "flutter run",
+      "options": { "cwd": "${workspaceFolder}/app" },
+      "isBackground": true,
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Librefy: Run all (backend + app)",
+      "dependsOrder": "parallel",
+      "dependsOn": [
+        "Librefy: Run backend",
+        "Librefy: Run app (Linux)"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Librefy: Reset DB (delete librefy.db)",
+      "type": "shell",
+      "command": "find . -maxdepth 4 -name 'librefy.db*' -print -delete",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Librefy: Backend tests",
+      "type": "shell",
+      "command": "go test ./...",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "group": "test",
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "Librefy: Flutter analyze",
+      "type": "shell",
+      "command": "flutter analyze",
+      "options": { "cwd": "${workspaceFolder}/app" },
+      "problemMatcher": []
+    }
+  ]
+}

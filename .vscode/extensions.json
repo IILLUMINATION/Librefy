@@ -1,0 +1,10 @@
+{
+  // VS Code will prompt to install these the first time the workspace is opened.
+  // None of them are required — they only improve DX for Librefy contributors.
+  "recommendations": [
+    "golang.go",
+    "Dart-Code.dart-code",
+    "Dart-Code.flutter",
+    "qwtel.sqlite-viewer"
+  ]
+}

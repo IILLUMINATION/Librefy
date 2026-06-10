@@ -1,0 +1,52 @@
+name: librefy
+description: "Librefy — privacy-first, libre/free music streaming with peer-assisted delivery."
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management — Riverpod (no code-gen in MVP, hand-written providers).
+  flutter_riverpod: ^2.5.1
+
+  # Routing
+  go_router: ^14.2.0
+
+  # Networking
+  dio: ^5.5.0
+
+  # Audio
+  just_audio: ^0.9.39
+  just_audio_background: ^0.0.1-beta.13
+  audio_session: ^0.1.21
+
+  # On-disk cache for streamed audio + metadata
+  just_audio_media_kit: ^2.0.4   # Linux desktop backend for just_audio
+  media_kit_libs_linux: ^1.1.3
+  path_provider: ^2.1.4
+  shared_preferences: ^2.3.2
+
+  # UI / utilities
+  cached_network_image: ^3.4.0
+  google_fonts: ^6.2.1
+  dynamic_color: ^1.7.0  # MD3 dynamic color on Android 12+
+  flutter_svg: ^2.0.10+1
+  crypto: ^3.0.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  # When you add files under assets/, list them here, e.g.:
+  #   assets:
+  #     - assets/icon.png
+  # An empty `assets:` entry prevents Flutter from generating
+  # AssetManifest.bin, which then breaks google_fonts at runtime.

@@ -1,0 +1,123 @@
+{
+  "_comment": "Sample libre catalog. All tracks are public-domain or Creative Commons licensed. Magnet URIs are placeholders for the operator to fill in (Librefy can run with HTTP-only sources). When you provide real magnets, populate the 'magnet' and 'infoHash' fields.",
+
+  "tracks": [
+    {
+      "id": "kevin-macleod-cipher",
+      "title": "Cipher",
+      "artist": "Kevin MacLeod",
+      "album": "Royalty Free",
+      "durationMs": 198000,
+      "artworkUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Cipher.jpg",
+      "streamUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Cipher.mp3",
+      "magnet": "",
+      "infoHash": "",
+      "license": {
+        "code": "CC-BY-4.0",
+        "name": "Creative Commons Attribution 4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "attribution": "Cipher by Kevin MacLeod — incompetech.com",
+      "tags": ["electronic", "ambient", "royalty-free"],
+      "provider": "catalog"
+    },
+    {
+      "id": "kevin-macleod-impact-prelude",
+      "title": "Impact Prelude",
+      "artist": "Kevin MacLeod",
+      "album": "Royalty Free",
+      "durationMs": 134000,
+      "artworkUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Impact%20Prelude.jpg",
+      "streamUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Impact%20Prelude.mp3",
+      "magnet": "",
+      "infoHash": "",
+      "license": {
+        "code": "CC-BY-4.0",
+        "name": "Creative Commons Attribution 4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "attribution": "Impact Prelude by Kevin MacLeod — incompetech.com",
+      "tags": ["cinematic", "orchestral"],
+      "provider": "catalog"
+    },
+    {
+      "id": "kevin-macleod-investigations",
+      "title": "Investigations",
+      "artist": "Kevin MacLeod",
+      "album": "Royalty Free",
+      "durationMs": 121000,
+      "artworkUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Investigations.jpg",
+      "streamUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Investigations.mp3",
+      "license": {
+        "code": "CC-BY-4.0",
+        "name": "Creative Commons Attribution 4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "attribution": "Investigations by Kevin MacLeod — incompetech.com",
+      "tags": ["jazz", "noir"],
+      "provider": "catalog"
+    },
+    {
+      "id": "scott-buckley-i-walk-with-ghosts",
+      "title": "I Walk With Ghosts",
+      "artist": "Scott Buckley",
+      "album": "Monomyth",
+      "durationMs": 268000,
+      "artworkUrl": "https://www.scottbuckley.com.au/wp-content/uploads/2020/05/monomyth.jpg",
+      "streamUrl": "https://www.scottbuckley.com.au/library/wp-content/uploads/2020/05/sbuckley_iwalkwithghosts.mp3",
+      "license": {
+        "code": "CC-BY-4.0",
+        "name": "Creative Commons Attribution 4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "attribution": "I Walk With Ghosts by Scott Buckley — scottbuckley.com.au",
+      "tags": ["cinematic", "ambient"],
+      "provider": "catalog"
+    },
+    {
+      "id": "bensound-sunny",
+      "title": "Sunny",
+      "artist": "Bensound",
+      "album": "Bensound Library",
+      "durationMs": 145000,
+      "artworkUrl": "https://www.bensound.com/bensound-img/sunny.jpg",
+      "streamUrl": "https://www.bensound.com/bensound-music/bensound-sunny.mp3",
+      "license": {
+        "code": "CC-BY-ND",
+        "name": "Bensound License (CC-BY-ND compatible)",
+        "url": "https://www.bensound.com/licensing"
+      },
+      "attribution": "Sunny by Bensound — bensound.com",
+      "tags": ["acoustic", "happy"],
+      "provider": "catalog"
+    }
+  ],
+
+  "playlists": [
+    {
+      "id": "featured-libre",
+      "title": "Libre Picks",
+      "description": "Hand-picked Creative Commons tracks to get you started.",
+      "artworkUrl": "",
+      "curated": true,
+      "trackIds": [
+        "kevin-macleod-cipher",
+        "scott-buckley-i-walk-with-ghosts",
+        "kevin-macleod-investigations",
+        "bensound-sunny",
+        "kevin-macleod-impact-prelude"
+      ]
+    },
+    {
+      "id": "focus",
+      "title": "Focus",
+      "description": "Calm, ambient libre music for deep work.",
+      "artworkUrl": "",
+      "curated": true,
+      "trackIds": [
+        "scott-buckley-i-walk-with-ghosts",
+        "kevin-macleod-cipher"
+      ]
+    }
+  ]
+}
