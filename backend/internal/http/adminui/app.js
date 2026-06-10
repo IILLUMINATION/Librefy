@@ -183,10 +183,11 @@ function openTrackModal(t) {
       <div class="full"><label>Tags (comma-separated)</label><input name="tags" value="${esc((v.tags || []).join(", "))}"></div>
     </div>
     <div class="actions">
-      <button type="button" class="ghost" onclick="closeModal()">Cancel</button>
+      <button type="button" class="ghost" data-cancel>Cancel</button>
       <button type="submit" class="primary">Save</button>
     </div>
   `;
+  $("#modalForm").querySelector("[data-cancel]").addEventListener("click", closeModal);
   $("#modalForm").onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -267,10 +268,11 @@ function openPlaylistModal(p) {
     <label>Track IDs (one per line; bare or "catalog:…")</label>
     <textarea name="trackIds" rows="8" placeholder="kevin-macleod-cipher&#10;catalog:scott-buckley-i-walk-with-ghosts">${esc((v.trackIds || []).join("\n"))}</textarea>
     <div class="actions">
-      <button type="button" class="ghost" onclick="closeModal()">Cancel</button>
+      <button type="button" class="ghost" data-cancel>Cancel</button>
       <button type="submit" class="primary">Save</button>
     </div>
   `;
+  $("#modalForm").querySelector("[data-cancel]").addEventListener("click", closeModal);
   $("#modalForm").onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -293,8 +295,10 @@ function openPlaylistModal(p) {
 
 // ---------- Modal helpers ----------
 
+function closeModal() {
+  $("#modal").classList.add("hidden");
+}
 $("#modalClose").addEventListener("click", closeModal);
-window.closeModal = function () { $("#modal").classList.add("hidden"); };
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
 
 // ---------- Import / Export ----------

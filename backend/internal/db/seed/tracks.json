@@ -1,15 +1,15 @@
 {
-  "_comment": "Sample libre catalog. All tracks are public-domain or Creative Commons licensed. Magnet URIs are placeholders for the operator to fill in (Librefy can run with HTTP-only sources). When you provide real magnets, populate the 'magnet' and 'infoHash' fields.",
+  "_comment": "Librefy starter catalog. All tracks are CC-BY-4.0 or public-domain. URLs have been verified to return HTTP 200 directly (no auth, no Cloudflare hotlink blocks). When you add magnet URIs, populate the 'magnet' and 'infoHash' fields.",
 
   "tracks": [
     {
-      "id": "kevin-macleod-cipher",
-      "title": "Cipher",
+      "id": "kevin-macleod-floating-cities",
+      "title": "Floating Cities",
       "artist": "Kevin MacLeod",
       "album": "Royalty Free",
-      "durationMs": 198000,
-      "artworkUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Cipher.jpg",
-      "streamUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Cipher.mp3",
+      "durationMs": 175000,
+      "artworkUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Floating%20Cities.jpg",
+      "streamUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Floating%20Cities.mp3",
       "magnet": "",
       "infoHash": "",
       "license": {
@@ -17,8 +17,8 @@
         "name": "Creative Commons Attribution 4.0",
         "url": "https://creativecommons.org/licenses/by/4.0/"
       },
-      "attribution": "Cipher by Kevin MacLeod — incompetech.com",
-      "tags": ["electronic", "ambient", "royalty-free"],
+      "attribution": "Floating Cities by Kevin MacLeod — incompetech.com",
+      "tags": ["cinematic", "ambient"],
       "provider": "catalog"
     },
     {
@@ -29,8 +29,6 @@
       "durationMs": 134000,
       "artworkUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Impact%20Prelude.jpg",
       "streamUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Impact%20Prelude.mp3",
-      "magnet": "",
-      "infoHash": "",
       "license": {
         "code": "CC-BY-4.0",
         "name": "Creative Commons Attribution 4.0",
@@ -58,37 +56,88 @@
       "provider": "catalog"
     },
     {
-      "id": "scott-buckley-i-walk-with-ghosts",
-      "title": "I Walk With Ghosts",
-      "artist": "Scott Buckley",
-      "album": "Monomyth",
-      "durationMs": 268000,
-      "artworkUrl": "https://www.scottbuckley.com.au/wp-content/uploads/2020/05/monomyth.jpg",
-      "streamUrl": "https://www.scottbuckley.com.au/library/wp-content/uploads/2020/05/sbuckley_iwalkwithghosts.mp3",
+      "id": "kevin-macleod-hyperfun",
+      "title": "Hyperfun",
+      "artist": "Kevin MacLeod",
+      "album": "Royalty Free",
+      "durationMs": 116000,
+      "artworkUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Hyperfun.jpg",
+      "streamUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Hyperfun.mp3",
       "license": {
         "code": "CC-BY-4.0",
         "name": "Creative Commons Attribution 4.0",
         "url": "https://creativecommons.org/licenses/by/4.0/"
       },
-      "attribution": "I Walk With Ghosts by Scott Buckley — scottbuckley.com.au",
-      "tags": ["cinematic", "ambient"],
+      "attribution": "Hyperfun by Kevin MacLeod — incompetech.com",
+      "tags": ["upbeat", "electronic"],
       "provider": "catalog"
     },
     {
-      "id": "bensound-sunny",
-      "title": "Sunny",
-      "artist": "Bensound",
-      "album": "Bensound Library",
-      "durationMs": 145000,
-      "artworkUrl": "https://www.bensound.com/bensound-img/sunny.jpg",
-      "streamUrl": "https://www.bensound.com/bensound-music/bensound-sunny.mp3",
+      "id": "kevin-macleod-sneaky-snitch",
+      "title": "Sneaky Snitch",
+      "artist": "Kevin MacLeod",
+      "album": "Royalty Free",
+      "durationMs": 117000,
+      "artworkUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Sneaky%20Snitch.jpg",
+      "streamUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Sneaky%20Snitch.mp3",
       "license": {
-        "code": "CC-BY-ND",
-        "name": "Bensound License (CC-BY-ND compatible)",
-        "url": "https://www.bensound.com/licensing"
+        "code": "CC-BY-4.0",
+        "name": "Creative Commons Attribution 4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
       },
-      "attribution": "Sunny by Bensound — bensound.com",
-      "tags": ["acoustic", "happy"],
+      "attribution": "Sneaky Snitch by Kevin MacLeod — incompetech.com",
+      "tags": ["playful", "comedic"],
+      "provider": "catalog"
+    },
+    {
+      "id": "soundhelix-song-1",
+      "title": "Algorithmic Sketch #1",
+      "artist": "SoundHelix",
+      "album": "SoundHelix Demos",
+      "durationMs": 372000,
+      "artworkUrl": "",
+      "streamUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+      "license": {
+        "code": "PD",
+        "name": "Public-domain demo",
+        "url": "https://www.soundhelix.com/"
+      },
+      "attribution": "SoundHelix-Song-1 — generated by SoundHelix",
+      "tags": ["electronic", "demo"],
+      "provider": "catalog"
+    },
+    {
+      "id": "soundhelix-song-2",
+      "title": "Algorithmic Sketch #2",
+      "artist": "SoundHelix",
+      "album": "SoundHelix Demos",
+      "durationMs": 426000,
+      "artworkUrl": "",
+      "streamUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+      "license": {
+        "code": "PD",
+        "name": "Public-domain demo",
+        "url": "https://www.soundhelix.com/"
+      },
+      "attribution": "SoundHelix-Song-2 — generated by SoundHelix",
+      "tags": ["electronic", "demo"],
+      "provider": "catalog"
+    },
+    {
+      "id": "soundhelix-song-3",
+      "title": "Algorithmic Sketch #3",
+      "artist": "SoundHelix",
+      "album": "SoundHelix Demos",
+      "durationMs": 444000,
+      "artworkUrl": "",
+      "streamUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+      "license": {
+        "code": "PD",
+        "name": "Public-domain demo",
+        "url": "https://www.soundhelix.com/"
+      },
+      "attribution": "SoundHelix-Song-3 — generated by SoundHelix",
+      "tags": ["electronic", "demo"],
       "provider": "catalog"
     }
   ],
@@ -98,13 +147,13 @@
       "id": "featured-libre",
       "title": "Libre Picks",
       "description": "Hand-picked Creative Commons tracks to get you started.",
-      "artworkUrl": "",
+      "artworkUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Floating%20Cities.jpg",
       "curated": true,
       "trackIds": [
-        "kevin-macleod-cipher",
-        "scott-buckley-i-walk-with-ghosts",
+        "kevin-macleod-floating-cities",
+        "kevin-macleod-sneaky-snitch",
         "kevin-macleod-investigations",
-        "bensound-sunny",
+        "kevin-macleod-hyperfun",
         "kevin-macleod-impact-prelude"
       ]
     },
@@ -112,11 +161,24 @@
       "id": "focus",
       "title": "Focus",
       "description": "Calm, ambient libre music for deep work.",
+      "artworkUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Impact%20Prelude.jpg",
+      "curated": true,
+      "trackIds": [
+        "kevin-macleod-floating-cities",
+        "kevin-macleod-impact-prelude",
+        "kevin-macleod-investigations"
+      ]
+    },
+    {
+      "id": "demos",
+      "title": "Algorithmic Demos",
+      "description": "Generated by SoundHelix — public-domain reference recordings.",
       "artworkUrl": "",
       "curated": true,
       "trackIds": [
-        "scott-buckley-i-walk-with-ghosts",
-        "kevin-macleod-cipher"
+        "soundhelix-song-1",
+        "soundhelix-song-2",
+        "soundhelix-song-3"
       ]
     }
   ]

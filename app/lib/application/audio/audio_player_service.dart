@@ -101,7 +101,16 @@ class AudioPlayerService {
     Player? player,
   })  : _repo = repository,
         _resolver = resolver,
-        _player = player ?? Player() {
+        _player = player ??
+            Player(
+              configuration: const PlayerConfiguration(
+                title: 'Librefy',
+                // Pipe libmpv's own warnings into our stream.log listener
+                // so failed URLs / codec issues are visible in dev logs.
+                logLevel: MPVLogLevel.warn,
+                bufferSize: 64 * 1024 * 1024,
+              ),
+            ) {
     _wirePlayerEvents();
   }
 
