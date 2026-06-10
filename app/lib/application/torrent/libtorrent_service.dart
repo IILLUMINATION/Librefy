@@ -14,14 +14,21 @@
 //      first audio file in the torrent.
 //   3. dispose() destroys the session and frees all native resources.
 //
-// Thread-safety: the underlying Go code is fully thread-safe; we still
-// keep Dart-side state behind a mutex because dispose() must wait for
-// outstanding openMagnet() calls.
+// Concurrency: every synchronous FFI call that may block (lt_create,
+// lt_add_magnet, lt_wait_metadata, lt_stream_url) is dispatched onto a
+// helper isolate via [Isolate.run]. This is non-negotiable on Android —
+// lt_create alone can take 1–3 s while it spins up DHT, binds sockets
+// and warms anacrolix/torrent state, and lt_wait_metadata can hang for
+// up to 45 s. Running those on the UI isolate produced reliable ANRs
+// ("Window … is not responsive"). The native session itself lives in
+// the Go runtime (process-global), so any isolate that calls
+// `DynamicLibrary.open` reaches the same shared state.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as dev;
 import 'dart:ffi' as ffi;
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 import 'package:path_provider/path_provider.dart';
@@ -40,6 +47,107 @@ const _logTag = 'librefy.torrent';
 LibtorrentBindings? _globalBindings;
 int _globalSessionId = -1;
 bool _globalInitFailed = false;
+
+// Serialises tryInit() calls so two parallel "play" taps right after
+// cold start can't both kick off `lt_create`.
+Completer<void>? _initInFlight;
+
+// ---------------------------------------------------------------------
+// Isolate-side workers.
+//
+// These run inside `Isolate.run`. They cannot capture closures from the
+// UI isolate, only their arguments. Each worker reopens the dynamic
+// library — that's cheap (dlopen on an already-loaded .so is a no-op
+// inside the linker) and gives the isolate its own typed function
+// pointers. The underlying native state is process-global.
+// ---------------------------------------------------------------------
+
+int _createSessionWorker(String cacheDir) {
+  final bindings = LibtorrentBindings.tryOpen();
+  if (bindings == null) {
+    return -2; // distinct sentinel: dlopen/lookup failure
+  }
+  final dirPtr = cacheDir.toNativeUtf8();
+  try {
+    return bindings.ltCreate(dirPtr, 0);
+  } finally {
+    calloc.free(dirPtr);
+  }
+}
+
+/// Result envelope so we can carry both the handle/file-count and any
+/// native error string back across the isolate boundary in one trip.
+class _AddMagnetResult {
+  _AddMagnetResult({
+    required this.handle,
+    required this.fileCount,
+    required this.streamUrl,
+    required this.error,
+  });
+  final int handle;
+  final int fileCount;
+  final String? streamUrl;
+  final String? error;
+}
+
+_AddMagnetResult _addMagnetWorker(
+    (int sid, String magnet, int fileIndex, int metadataTimeoutMs) args) {
+  final bindings = LibtorrentBindings.tryOpen();
+  if (bindings == null) {
+    return _AddMagnetResult(
+      handle: -1,
+      fileCount: -1,
+      streamUrl: null,
+      error: 'dlopen failed inside worker isolate',
+    );
+  }
+  final (sid, magnet, fileIndex, timeoutMs) = args;
+
+  final magnetPtr = magnet.toNativeUtf8();
+  try {
+    final handle = bindings.ltAddMagnet(sid, magnetPtr);
+    if (handle < 0) {
+      return _AddMagnetResult(
+        handle: -1,
+        fileCount: -1,
+        streamUrl: null,
+        error: 'lt_add_magnet: ${bindings.lastError() ?? "unknown error"}',
+      );
+    }
+
+    final fileCount = bindings.ltWaitMetadata(sid, handle, timeoutMs);
+    if (fileCount < 0) {
+      return _AddMagnetResult(
+        handle: handle,
+        fileCount: -1,
+        streamUrl: null,
+        error: 'wait_metadata: ${bindings.lastError() ?? "timeout"}',
+      );
+    }
+
+    final pickIdx = fileIndex.clamp(0, fileCount - 1);
+    final urlPtr = bindings.ltStreamUrl(sid, handle, pickIdx);
+    if (urlPtr.address == 0) {
+      return _AddMagnetResult(
+        handle: handle,
+        fileCount: fileCount,
+        streamUrl: null,
+        error: 'stream_url: ${bindings.lastError() ?? "null pointer"}',
+      );
+    }
+    final url = urlPtr.toDartString();
+    bindings.ltFreeCString(urlPtr);
+
+    return _AddMagnetResult(
+      handle: handle,
+      fileCount: fileCount,
+      streamUrl: url,
+      error: null,
+    );
+  } finally {
+    calloc.free(magnetPtr);
+  }
+}
 
 class LibtorrentService implements TorrentService {
   LibtorrentService._(this._bindings, this._sessionId);
@@ -69,19 +177,45 @@ class LibtorrentService implements TorrentService {
       return LibtorrentService._(_globalBindings!, _globalSessionId);
     }
 
-    final bindings = LibtorrentBindings.tryOpen();
-    if (bindings == null) {
-      dev.log('native libtorrent unavailable on this platform', name: _logTag);
-      _globalInitFailed = true;
+    // Wait if another caller is already initialising.
+    final pending = _initInFlight;
+    if (pending != null) {
+      await pending.future;
+      if (_globalInitFailed) return null;
+      if (_globalBindings != null && _globalSessionId >= 0) {
+        return LibtorrentService._(_globalBindings!, _globalSessionId);
+      }
       return null;
     }
-    final dir = await _resolveCacheDir();
-    final cacheDir = '$dir/torrent-cache';
-    await Directory(cacheDir).create(recursive: true);
 
-    final dirPtr = cacheDir.toNativeUtf8();
+    final completer = Completer<void>();
+    _initInFlight = completer;
     try {
-      final sid = bindings.ltCreate(dirPtr, 0);
+      // Open the library on the UI isolate too — we need the typed
+      // function pointers locally for openMagnet's lifetime calls
+      // (ltRelease, ltStatsJson). Reopening here is cheap; the OS
+      // loader returns the same handle.
+      final bindings = LibtorrentBindings.tryOpen();
+      if (bindings == null) {
+        dev.log('native libtorrent unavailable on this platform',
+            name: _logTag);
+        _globalInitFailed = true;
+        return null;
+      }
+
+      final dir = await _resolveCacheDir();
+      final cacheDir = '$dir/torrent-cache';
+      await Directory(cacheDir).create(recursive: true);
+
+      // Critical: lt_create is synchronous and can block 1–3 s on
+      // slow devices. MUST run off the UI isolate or it ANRs.
+      final sid = await Isolate.run(() => _createSessionWorker(cacheDir));
+
+      if (sid == -2) {
+        dev.log('worker isolate failed to open native lib', name: _logTag);
+        _globalInitFailed = true;
+        return null;
+      }
       if (sid < 0) {
         dev.log('ltCreate failed: ${bindings.lastError()}', name: _logTag);
         _globalInitFailed = true;
@@ -89,10 +223,12 @@ class LibtorrentService implements TorrentService {
       }
       _globalBindings = bindings;
       _globalSessionId = sid;
-      dev.log('libtorrent session up (sid=$sid, cache=$cacheDir)', name: _logTag);
+      dev.log('libtorrent session up (sid=$sid, cache=$cacheDir)',
+          name: _logTag);
       return LibtorrentService._(bindings, sid);
     } finally {
-      calloc.free(dirPtr);
+      completer.complete();
+      _initInFlight = null;
     }
   }
 
@@ -104,59 +240,49 @@ class LibtorrentService implements TorrentService {
     if (_closed) {
       throw StateError('LibtorrentService is disposed');
     }
-    final magnetPtr = magnet.toNativeUtf8();
-    try {
-      final handle = _bindings.ltAddMagnet(_sessionId, magnetPtr);
-      if (handle < 0) {
-        throw Exception('lt_add_magnet failed: ${_bindings.lastError()}');
-      }
-      _magnetToHandle[magnet] = handle;
-      dev.log('added magnet (handle=$handle), file=$fileIndex, waiting for metadata…',
-          name: _logTag);
+    dev.log('openMagnet: file=$fileIndex, dispatching to worker isolate…',
+        name: _logTag);
 
-      final fileCount = await Future(() {
-        return _bindings.ltWaitMetadata(
-          _sessionId,
-          handle,
-          metadataTimeout.inMilliseconds,
-        );
-      });
-      if (fileCount < 0) {
-        final err = _bindings.lastError() ?? 'metadata timeout';
-        throw Exception('wait_metadata: $err');
-      }
-      dev.log('got metadata: $fileCount files', name: _logTag);
+    final sid = _sessionId;
+    final timeoutMs = metadataTimeout.inMilliseconds;
+    // Run the entire add → wait-metadata → stream-url chain in a
+    // worker isolate. wait_metadata alone can block up to 45 s; doing
+    // it on the UI isolate is what produced the ANRs on Android.
+    final result = await Isolate.run(
+      () => _addMagnetWorker((sid, magnet, fileIndex, timeoutMs)),
+    );
 
-      // Clamp out-of-range file indices so a stale DB row can't ask the
-      // native side for a non-existent file (which would 404 forever).
-      final pickIdx = fileIndex.clamp(0, fileCount - 1);
-      if (pickIdx != fileIndex) {
-        dev.log('  fileIndex $fileIndex out of range, clamped to $pickIdx',
-            name: _logTag);
+    if (result.error != null) {
+      // Best-effort cleanup if we got a partial handle.
+      if (result.handle >= 0) {
+        try {
+          _bindings.ltRelease(sid, result.handle);
+        } catch (_) {/* ignore */}
       }
-
-      final urlPtr = _bindings.ltStreamUrl(_sessionId, handle, pickIdx);
-      if (urlPtr.address == 0) {
-        throw Exception('stream_url: ${_bindings.lastError()}');
-      }
-      final url = urlPtr.toDartString();
-      _bindings.ltFreeCString(urlPtr);
-      dev.log('stream URL: $url', name: _logTag);
-
-      return TorrentSession(
-        localUri: Uri.parse(url),
-        dispose: () async {
-          _bindings.ltRelease(_sessionId, handle);
-          _magnetToHandle.remove(magnet);
-        },
-        stats: _statsStream(handle),
-      );
-    } finally {
-      calloc.free(magnetPtr);
+      throw Exception(result.error);
     }
+    final handle = result.handle;
+    final fileCount = result.fileCount;
+    final url = result.streamUrl!;
+    _magnetToHandle[magnet] = handle;
+    dev.log(
+      'magnet opened: handle=$handle, files=$fileCount, url=$url',
+      name: _logTag,
+    );
+
+    return TorrentSession(
+      localUri: Uri.parse(url),
+      dispose: () async {
+        _bindings.ltRelease(sid, handle);
+        _magnetToHandle.remove(magnet);
+      },
+      stats: _statsStream(handle),
+    );
   }
 
   /// Poll the native stats endpoint periodically and surface as a stream.
+  /// Each poll is a quick FFI call (no blocking I/O) — safe on the UI
+  /// isolate.
   Stream<TorrentStats> _statsStream(int handle) async* {
     const buf = 1024;
     while (!_closed && _magnetToHandle.containsValue(handle)) {

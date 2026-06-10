@@ -15,7 +15,9 @@
 //   - Record anonymous play events through the repository.
 import 'dart:async';
 import 'dart:developer' as dev;
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 // Hide media_kit's `Track` to avoid clashing with domain.Track.
 import 'package:media_kit/media_kit.dart' hide Track;
 
@@ -125,6 +127,49 @@ class PlaybackError {
       '${cause != null ? "\n  cause: $cause" : ""}';
 }
 
+/// Process-global Player. Lives outside the Riverpod scope on purpose:
+/// when Flutter performs a hot-restart it throws away every ProviderScope
+/// and re-runs main(), but libmpv's worker thread is still mid-callback
+/// into a Dart trampoline that the VM is about to delete. Tearing down
+/// the Player in that moment produces the dreaded crash:
+///
+///   error: Callback invoked after it has been deleted.
+///   F/libc: Fatal signal 6 (SIGABRT) in tid (mpv/mpv core)
+///
+/// By keeping the same Player instance across hot-restarts (mirroring
+/// what we already do for the native libtorrent session) the libmpv
+/// worker keeps talking to the same callback table for the lifetime of
+/// the process, and the crash disappears.
+///
+/// Tradeoff: we never call _player.dispose() — the OS reclaims it when
+/// the process exits. In practice the Player object is small (a few
+/// MiB of internal buffers plus libmpv state) and Riverpod's lifetime
+/// isn't a tight enough scope to justify the crash risk.
+Player? _globalPlayer;
+
+/// Default configuration used when we create the singleton on first use.
+/// Tunings rationale:
+///   * `logLevel`: in debug builds keep warn so codec / url issues are
+///     visible. In release lower to error to avoid burning main-thread
+///     time on FFI log callbacks.
+///   * `bufferSize`: 16 MiB — libmpv internally uses this for the demux
+///     queue. 16 MiB is plenty for audio (a 320 kbps stream = ~40 KiB/s;
+///     16 MiB ≈ 7 minutes of buffer). The previous 64 MiB was sized for
+///     video and caused noticeable cold-start allocation cost on Android.
+PlayerConfiguration _playerConfig() => PlayerConfiguration(
+      title: 'Librefy',
+      logLevel: kDebugMode ? MPVLogLevel.warn : MPVLogLevel.error,
+      bufferSize: 16 * 1024 * 1024,
+    );
+
+Player _ensureGlobalPlayer() {
+  final existing = _globalPlayer;
+  if (existing != null) return existing;
+  final p = Player(configuration: _playerConfig());
+  _globalPlayer = p;
+  return p;
+}
+
 class AudioPlayerService {
   AudioPlayerService({
     required CatalogRepository repository,
@@ -132,17 +177,47 @@ class AudioPlayerService {
     Player? player,
   })  : _repo = repository,
         _resolver = resolver,
-        _player = player ??
-            Player(
-              configuration: const PlayerConfiguration(
-                title: 'Librefy',
-                // Pipe libmpv's own warnings into our stream.log listener
-                // so failed URLs / codec issues are visible in dev logs.
-                logLevel: MPVLogLevel.warn,
-                bufferSize: 64 * 1024 * 1024,
-              ),
-            ) {
+        _player = player ?? _ensureGlobalPlayer() {
     _wirePlayerEvents();
+    _configureMpv();
+  }
+
+  /// Apply libmpv runtime tunings that aren't exposed through
+  /// [PlayerConfiguration]. Best-effort: if any property fails (e.g. the
+  /// web backend doesn't expose mpv) we just log and move on.
+  ///
+  /// Rationale:
+  ///   - `ytdl=no` disables the youtube-dl/yt-dlp hook. libmpv runs it on
+  ///     every URL by default and prints noisy "Subprocess failed: init"
+  ///     errors when the binary isn't installed. Librefy never plays
+  ///     YouTube URLs, so this is pure noise + a small latency hit.
+  ///   - `network-timeout=30` raises libmpv's HTTP read timeout from the
+  ///     default 5s to 30s. The loopback torrent streamer needs a few
+  ///     seconds to fetch the first pieces from peers before bytes start
+  ///     flowing; the old default produced "Время ожидания соединения
+  ///     истекло" / "Failed to open" on slow swarms.
+  ///   - `cache=yes` + `cache-secs=10` keeps a small forward buffer so a
+  ///     temporary peer stall doesn't underrun the player.
+  void _configureMpv() {
+    final platform = _player.platform;
+    if (platform == null) return;
+    // ignore: avoid_dynamic_calls
+    final dyn = platform as dynamic;
+    Future<void> trySet(String key, String value) async {
+      try {
+        await dyn.setProperty(key, value);
+      } catch (e) {
+        dev.log('  mpv setProperty $key=$value ignored: $e', name: _logTag);
+      }
+    }
+
+    unawaited(() async {
+      await trySet('ytdl', 'no');
+      await trySet('network-timeout', '30');
+      await trySet('cache', 'yes');
+      await trySet('cache-secs', '10');
+      await trySet('demuxer-readahead-secs', '10');
+    }());
   }
 
   final CatalogRepository _repo;
@@ -299,15 +374,15 @@ class AudioPlayerService {
         } catch (_) {}
       }));
     }
-    // Stop playback first so libmpv's worker thread releases its sources
-    // before we tear the player down. Wrap each step independently —
-    // hot-restart in particular invokes us with libmpv still mid-callback,
-    // and an exception here aborts the whole isolate.
+    // Stop playback so libmpv's worker thread releases its sources, but
+    // do NOT call _player.dispose(): the player is the process-global
+    // singleton (see _globalPlayer at top of file). Disposing it during
+    // a Riverpod teardown / hot-restart while libmpv is still mid-callback
+    // is exactly what produced "Callback invoked after it has been
+    // deleted" SIGABRTs in past iterations. The next AudioPlayerService
+    // will reuse the same Player.
     try {
       await _player.stop();
-    } catch (_) {}
-    try {
-      await _player.dispose();
     } catch (_) {}
     try {
       await _snapshotCtrl.close();
@@ -399,6 +474,24 @@ class AudioPlayerService {
         });
       }
 
+      // If the resolved URI points at our loopback torrent streamer, the
+      // server is up the instant lt_stream_url returns BUT the first
+      // pieces may still be downloading. libmpv's HTTP reader will time
+      // out and bail with "Failed to open" if it connects before the
+      // streamer has bytes to serve. Probe the URL until it returns a
+      // 2xx/206 (or until we give up after ~10s) before handing it to
+      // libmpv. Non-loopback HTTP sources skip the probe — the real
+      // backend is expected to respond fast.
+      if (_isLoopbackHttp(resolved.uri)) {
+        final ok = await _waitForStream(resolved.uri,
+            attempts: 20, perAttemptTimeout: const Duration(seconds: 1));
+        if (gen != _generation) return;
+        if (!ok) {
+          dev.log('  stream readiness probe failed, opening anyway',
+              name: _logTag);
+        }
+      }
+
       await _player.open(Media(resolved.uri.toString()), play: true);
 
       if (previousStatsSub != null) {
@@ -455,7 +548,19 @@ class AudioPlayerService {
     // media_kit emits an `error` stream of strings whenever libmpv reports
     // something. We forward those to the UI / log so it's obvious what
     // failed (bad URL, codec, network, …).
+    //
+    // Exception: libmpv occasionally complains "property not found" for
+    // keys media_kit tries to set on every Player init (subs-fallback,
+    // osc, …). On Android in particular those keys don't exist in the
+    // audio-only build of libmpv that media_kit ships. The errors are
+    // cosmetic — libmpv just ignores the unknown property — but they
+    // would otherwise bubble up to the user as a scary snackbar on every
+    // app start. Whitelist that substring to dev.log only.
     _subs.add(_player.stream.error.listen((err) {
+      if (err.contains('property not found')) {
+        dev.log('mpv (ignored): $err', name: _logTag);
+        return;
+      }
       _reportError('libmpv: $err');
     }));
     _subs.add(_player.stream.log.listen((entry) {
@@ -475,5 +580,59 @@ class AudioPlayerService {
   void _emit(PlaybackSnapshot s) {
     _snap = s;
     if (!_snapshotCtrl.isClosed) _snapshotCtrl.add(s);
+  }
+
+  static bool _isLoopbackHttp(Uri uri) {
+    if (uri.scheme != 'http' && uri.scheme != 'https') return false;
+    final host = uri.host;
+    return host == '127.0.0.1' ||
+        host == 'localhost' ||
+        host == '::1' ||
+        host.startsWith('127.');
+  }
+
+  /// Issues a small Range GET (or HEAD as fallback) to [uri] up to
+  /// [attempts] times until the server responds successfully. Returns
+  /// true on the first 2xx/206 response.
+  ///
+  /// We deliberately use a fresh HttpClient per call: the torrent
+  /// streamer is process-local, requests are cheap, and we want zero
+  /// pooling so a stale connection from a previous track can't be
+  /// reused (libmpv just disposed of one).
+  Future<bool> _waitForStream(Uri uri,
+      {required int attempts,
+      Duration perAttemptTimeout = const Duration(seconds: 1)}) async {
+    final client = HttpClient()
+      ..connectionTimeout = perAttemptTimeout
+      ..idleTimeout = const Duration(seconds: 2);
+    try {
+      for (var i = 0; i < attempts; i++) {
+        try {
+          final req = await client
+              .getUrl(uri)
+              .timeout(perAttemptTimeout);
+          // Ask for a single byte so the streamer doesn't have to
+          // queue large amounts of data to satisfy the probe.
+          req.headers.set(HttpHeaders.rangeHeader, 'bytes=0-0');
+          final resp = await req.close().timeout(perAttemptTimeout);
+          // Drain & close immediately — we only care about the status.
+          await resp.drain<void>().timeout(perAttemptTimeout);
+          if (resp.statusCode >= 200 && resp.statusCode < 300) {
+            dev.log('  stream ready after ${i + 1} probe(s) '
+                '(status=${resp.statusCode})', name: _logTag);
+            return true;
+          }
+          dev.log('  probe #${i + 1} status=${resp.statusCode}', name: _logTag);
+        } on TimeoutException {
+          // Streamer not answering yet; sleep briefly and retry.
+        } catch (e) {
+          dev.log('  probe #${i + 1} error: $e', name: _logTag);
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      return false;
+    } finally {
+      client.close(force: true);
+    }
   }
 }

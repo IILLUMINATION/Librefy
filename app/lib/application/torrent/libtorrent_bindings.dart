@@ -10,6 +10,7 @@
 //     the native lib. We free them by calling lt_free_cstring.
 //   - C strings PASSED IN are copied by Go; we may free them
 //     immediately after the call.
+import 'dart:developer' as dev;
 import 'dart:ffi' as ffi;
 import 'dart:io' show Platform;
 
@@ -97,9 +98,20 @@ class LibtorrentBindings {
     try {
       final lib = _openPlatform();
       return LibtorrentBindings._(lib);
-    } on ArgumentError {
+    } on ArgumentError catch (e, st) {
+      // Symbol lookup failure (e.g. our .so was built but is missing
+      // one of the exported lt_* functions). Log loudly — this is a
+      // packaging bug, not a normal "platform unsupported" condition.
+      dev.log('LibtorrentBindings: symbol lookup failed: $e',
+          name: 'librefy.torrent', error: e, stackTrace: st);
       return null;
-    } catch (_) {
+    } catch (e, st) {
+      // dlopen() failure: .so not present in jniLibs/<abi>/ for this
+      // device, missing dependency, or wrong architecture. The exact
+      // message is what we want in the user-visible logcat so we can
+      // tell from a bug report whether the native lib needs rebuilding.
+      dev.log('LibtorrentBindings: dlopen failed: $e',
+          name: 'librefy.torrent', error: e, stackTrace: st);
       return null;
     }
   }

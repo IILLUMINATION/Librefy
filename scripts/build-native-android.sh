@@ -41,20 +41,28 @@ if [[ ! -d "${TOOLCHAIN}" ]]; then
   exit 1
 fi
 
-# Map ABI → (GOARCH, GOARM, clang-target-triple).
+# Map ABI → (GOARCH, GOARM, clang-target-triple, sysroot-subdir).
+# sysroot-subdir is where libc++_shared.so lives inside the NDK sysroot
+# for the corresponding ABI — we must ship that .so alongside our own,
+# otherwise Android's linker fails at app start with:
+#   "dlopen failed: library "libc++_shared.so" not found: needed by
+#    /data/app/.../lib/<abi>/liblibrefy_torrent.so"
 build_for_abi() {
   local abi="$1"
-  local goarch goarm clang_triple
+  local goarch goarm clang_triple sysroot_subdir
   # Android API level the resulting .so will be linked against.
   # 21 = Android 5.0 (Lollipop); this matches Flutter's default minSdk.
   local api="${ANDROID_API:-21}"
   case "${abi}" in
     arm64-v8a)
-      goarch=arm64; goarm=""; clang_triple="aarch64-linux-android${api}" ;;
+      goarch=arm64; goarm=""; clang_triple="aarch64-linux-android${api}"
+      sysroot_subdir="aarch64-linux-android" ;;
     armeabi-v7a)
-      goarch=arm; goarm=7; clang_triple="armv7a-linux-androideabi${api}" ;;
+      goarch=arm; goarm=7; clang_triple="armv7a-linux-androideabi${api}"
+      sysroot_subdir="arm-linux-androideabi" ;;
     x86_64)
-      goarch=amd64; goarm=""; clang_triple="x86_64-linux-android${api}" ;;
+      goarch=amd64; goarm=""; clang_triple="x86_64-linux-android${api}"
+      sysroot_subdir="x86_64-linux-android" ;;
     *)
       echo "✗ unsupported ABI: ${abi}" >&2; return 1 ;;
   esac
@@ -85,7 +93,23 @@ build_for_abi() {
       -ldflags="-s -w -checklinkname=0" \
       -o "${out_dir}/liblibrefy_torrent.so" .
   )
+  # `c-shared` also writes a companion .h next to the .so — useless at
+  # runtime and AGP will warn about non-.so files under jniLibs/. Drop it.
+  rm -f "${out_dir}/liblibrefy_torrent.h"
   echo "  ✓ ${out_dir}/liblibrefy_torrent.so"
+
+  # Co-ship the matching libc++_shared.so. The .so we just built depends
+  # on it; Gradle does NOT copy it automatically because we don't use
+  # externalNativeBuild — our Go-toolchain pipeline is opaque to AGP.
+  local stl_src="${NDK}/toolchains/llvm/prebuilt/${HOST_TAG}/sysroot/usr/lib/${sysroot_subdir}/libc++_shared.so"
+  if [[ -f "${stl_src}" ]]; then
+    cp -f "${stl_src}" "${out_dir}/libc++_shared.so"
+    echo "  ✓ ${out_dir}/libc++_shared.so"
+  else
+    echo "  ! libc++_shared.so not found at ${stl_src}" >&2
+    echo "    App will crash at startup with dlopen failure on this ABI." >&2
+    return 1
+  fi
 }
 
 ABIS="${ABIS:-arm64-v8a armeabi-v7a x86_64}"

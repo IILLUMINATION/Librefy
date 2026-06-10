@@ -1,16 +1,14 @@
 // API base URL resolution.
 //
 // Resolution order:
-//   1. Build-time override:
-//        flutter build linux --dart-define=LIBREFY_API=https://your.host
-//   2. Debug builds → local backend (Android emulator host on Android,
-//      127.0.0.1 elsewhere). This is what `flutter run` developers see.
-//   3. Release builds → the public demo backend so a freshly-installed
-//      APK has tracks on first launch. Users can change it from
-//      Settings → Backend URL.
-import 'dart:io' show Platform;
-
-import 'package:flutter/foundation.dart';
+//   1. Build-time override (escape hatch for local development):
+//        flutter build linux --dart-define=LIBREFY_API=http://127.0.0.1:8080
+//   2. Otherwise: the public Librefy demo backend on the VPS, both in
+//      debug and release builds. This keeps a freshly-cloned checkout
+//      playable on first launch without any extra wiring.
+//
+// The user can still point Librefy at a self-hosted librefyd from the
+// Settings screen — that choice is persisted via [ApiBaseUrlStore].
 
 class ApiConfig {
   const ApiConfig._();
@@ -23,13 +21,6 @@ class ApiConfig {
   static String defaultBaseUrl() {
     const override = String.fromEnvironment('LIBREFY_API');
     if (override.isNotEmpty) return override;
-
-    if (kReleaseMode) return publicDemoBaseUrl;
-
-    if (Platform.isAndroid) {
-      // Android emulator's loopback to host machine.
-      return 'http://10.0.2.2:8080';
-    }
-    return 'http://127.0.0.1:8080';
+    return publicDemoBaseUrl;
   }
 }

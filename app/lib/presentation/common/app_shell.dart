@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import '../../application/audio/audio_providers.dart';
 import 'mini_player.dart';
 import 'p2p_intro_dialog.dart';
+import 'privacy_policy_dialog.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({required this.child, super.key});
@@ -43,8 +44,14 @@ class _AppShellState extends ConsumerState<AppShell> {
   void _scheduleIntroOnce() {
     if (_introScheduled) return;
     _introScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) maybeShowP2pIntro(context, ref);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Privacy policy MUST be accepted before any other on-launch
+      // modal — it explains what the P2P intro is about, and the user
+      // can quit the app here without ever touching the network.
+      if (!mounted) return;
+      await maybeShowPrivacyPolicy(context, ref);
+      if (!mounted) return;
+      await maybeShowP2pIntro(context, ref);
     });
   }
 

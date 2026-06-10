@@ -10,8 +10,12 @@
 // This is the ONLY place in the player pipeline that knows magnets exist.
 // just_audio talks to HTTP(s)/file URIs only, which is exactly what the
 // torrent layer exposes via its local proxy.
+import 'dart:developer' as dev;
+
 import '../../domain/entities/stream_info.dart';
 import 'torrent_service.dart';
+
+const _logTag = 'librefy.resolver';
 
 class ResolvedSource {
   ResolvedSource({
@@ -34,17 +38,38 @@ class NoPlayableSourceError implements Exception {
 }
 
 class SourceResolver {
-  SourceResolver(this._torrent);
-  final TorrentService _torrent;
+  /// Accepts an async [TorrentService] factory rather than a ready
+  /// instance: on Android (and slow Linux installs) the native libtorrent
+  /// session takes a few hundred ms to spin up after launch, and a user
+  /// who taps "play" during that window must not get a premature
+  /// HttpOnly fallback — that's what produced "This track is P2P-only"
+  /// errors right after app start even though native support was
+  /// available a heartbeat later.
+  ///
+  /// The factory may return [HttpOnlyTorrentService] once it's certain
+  /// native delivery is unavailable for this run (init failed or user
+  /// disabled P2P). The resolver awaits the factory before checking
+  /// [TorrentService.supportsPeerDelivery].
+  SourceResolver(Future<TorrentService> Function() torrentFactory)
+      : _torrentFactory = torrentFactory;
+
+  final Future<TorrentService> Function() _torrentFactory;
 
   Future<ResolvedSource> resolve(StreamInfo info) async {
     final hasMagnet = info.magnet != null && info.magnet!.isNotEmpty;
     final http = info.httpUrl;
     final hasHttp = http != null && http.isNotEmpty;
 
-    if (hasMagnet && _torrent.supportsPeerDelivery) {
+    final torrent = await _torrentFactory();
+    dev.log(
+      'resolve: hasMagnet=$hasMagnet hasHttp=$hasHttp '
+      'torrent=${torrent.runtimeType} supportsP2P=${torrent.supportsPeerDelivery}',
+      name: _logTag,
+    );
+
+    if (hasMagnet && torrent.supportsPeerDelivery) {
       try {
-        final session = await _torrent.openMagnet(
+        final session = await torrent.openMagnet(
           info.magnet!,
           fileIndex: info.fileIndex,
         );
@@ -53,8 +78,15 @@ class SourceResolver {
           usingP2P: true,
           session: session,
         );
-      } catch (_) {
-        // Fall through to HTTP fallback.
+      } catch (e, st) {
+        // Don't swallow silently — diagnosing "P2P-only" errors without
+        // knowing why the native engine refused the magnet is painful.
+        dev.log(
+          'openMagnet failed, will try HTTP fallback: $e',
+          name: _logTag,
+          error: e,
+          stackTrace: st,
+        );
       }
     }
 
@@ -66,14 +98,21 @@ class SourceResolver {
     // no HTTP fallback. Be loud and specific so the user/operator can
     // fix it (either add a streamUrl, or wait for the libtorrent build).
     if (hasMagnet) {
+      // Distinguish the two failure modes: native engine absent vs.
+      // native engine present but couldn't open the magnet. The
+      // operator's fix is different for each.
+      final reason = torrent.supportsPeerDelivery
+          ? 'the torrent engine could not open this magnet (no metadata, no peers, or invalid magnet)'
+          : 'the torrent engine is not available on this device';
       throw NoPlayableSourceError(
-        message: 'This track is P2P-only (magnet). The current build has '
-            'no torrent engine wired up — add a streamUrl in the admin '
-            'panel, or wait for the libtorrent integration in v0.2.',
+        message:
+            'Этот трек доступен только через P2P (magnet), но $reason, '
+            'а HTTP-источника у трека нет. Добавьте streamUrl в админ-панели '
+            'или подождите интеграцию libtorrent (v0.2).',
       );
     }
     throw NoPlayableSourceError(
-      message: 'This track has no playable source (no streamUrl, no magnet).',
+      message: 'У трека нет ни streamUrl, ни magnet — нечего воспроизводить.',
     );
   }
 }
