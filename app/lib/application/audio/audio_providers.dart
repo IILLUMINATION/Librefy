@@ -34,3 +34,11 @@ final playbackSnapshotProvider = StreamProvider.autoDispose((ref) {
   final svc = ref.watch(audioPlayerServiceProvider);
   return svc.snapshots;
 });
+
+/// Stream of recoverable playback / resolution errors. Pipe into a
+/// SnackBar listener so users see what went wrong instead of silent
+/// "nothing is playing".
+final playbackErrorProvider = StreamProvider<PlaybackError>((ref) {
+  final svc = ref.watch(audioPlayerServiceProvider);
+  return svc.errors;
+});

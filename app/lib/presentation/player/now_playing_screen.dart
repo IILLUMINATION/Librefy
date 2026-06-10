@@ -44,83 +44,104 @@ class NowPlayingScreen extends ConsumerWidget {
           final progress = snap.duration.inMilliseconds == 0
               ? 0.0
               : snap.position.inMilliseconds / snap.duration.inMilliseconds;
+          // LayoutBuilder lets the artwork shrink on short windows
+          // (laptop debug, small phones, split-screen) so the column
+          // never overflows. We cap the artwork at 320dp and at 40% of
+          // the available height — whichever is smaller wins.
           return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  const Spacer(),
-                  Artwork(url: t.artworkUrl, size: 320, radius: 24),
-                  const SizedBox(height: 24),
-                  Text(t.title,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 6),
-                  Text(t.artist,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          )),
-                  const SizedBox(height: 24),
-                  Slider(
-                    value: progress.clamp(0.0, 1.0),
-                    onChanged: (v) {
-                      final to = Duration(
-                        milliseconds: (snap.duration.inMilliseconds * v).round(),
-                      );
-                      svc.seek(to);
-                    },
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(_fmt(snap.position)),
-                        Text(_fmt(snap.duration)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final artSize = constraints.maxHeight * 0.4;
+                final art = artSize.clamp(140.0, 320.0);
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                  child: Column(
                     children: [
-                      IconButton(
-                        iconSize: 36,
-                        onPressed: svc.previous,
-                        icon: const Icon(Icons.skip_previous_rounded),
+                      Artwork(url: t.artworkUrl, size: art, radius: 24),
+                      const SizedBox(height: 20),
+                      Text(
+                        t.title,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      FilledButton(
-                        onPressed: svc.togglePlay,
-                        style: FilledButton.styleFrom(
-                          shape: const CircleBorder(),
-                          padding: const EdgeInsets.all(20),
+                      const SizedBox(height: 6),
+                      Text(
+                        t.artist,
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 20),
+                      Slider(
+                        value: progress.clamp(0.0, 1.0),
+                        onChanged: (v) {
+                          final to = Duration(
+                            milliseconds:
+                                (snap.duration.inMilliseconds * v).round(),
+                          );
+                          svc.seek(to);
+                        },
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(_fmt(snap.position)),
+                            Text(_fmt(snap.duration)),
+                          ],
                         ),
-                        child: Icon(
-                          snap.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                          size: 36,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          IconButton(
+                            iconSize: 36,
+                            onPressed: svc.previous,
+                            icon: const Icon(Icons.skip_previous_rounded),
+                          ),
+                          FilledButton(
+                            onPressed: svc.togglePlay,
+                            style: FilledButton.styleFrom(
+                              shape: const CircleBorder(),
+                              padding: const EdgeInsets.all(20),
+                            ),
+                            child: Icon(
+                              snap.playing
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              size: 36,
+                            ),
+                          ),
+                          IconButton(
+                            iconSize: 36,
+                            onPressed: svc.next,
+                            icon: const Icon(Icons.skip_next_rounded),
+                          ),
+                        ],
+                      ),
+                      if (t.attribution != null && t.attribution!.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        Text(
+                          t.attribution!,
+                          textAlign: TextAlign.center,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
                         ),
-                      ),
-                      IconButton(
-                        iconSize: 36,
-                        onPressed: svc.next,
-                        icon: const Icon(Icons.skip_next_rounded),
-                      ),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  if (t.attribution != null && t.attribution!.isNotEmpty)
-                    Text(
-                      t.attribution!,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                  const Spacer(),
-                ],
-              ),
+                );
+              },
             ),
           );
         },

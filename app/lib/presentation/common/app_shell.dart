@@ -6,11 +6,14 @@
 // window is at least 600dp wide — that's how the Linux desktop build
 // gets a desktop-appropriate layout for free.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../application/audio/audio_providers.dart';
 import 'mini_player.dart';
 
-class AppShell extends StatelessWidget {
+class AppShell extends ConsumerWidget {
   const AppShell({required this.child, super.key});
 
   final Widget child;
@@ -30,7 +33,30 @@ class AppShell extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Surface playback errors as a snackbar with a copy-to-clipboard
+    // action so users can paste the failure into a bug report.
+    ref.listen(playbackErrorProvider, (_, next) {
+      final err = next.valueOrNull;
+      if (err == null) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger == null) return;
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(err.message, maxLines: 3, overflow: TextOverflow.ellipsis),
+            duration: const Duration(seconds: 6),
+            action: SnackBarAction(
+              label: 'Copy log',
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: err.toString()));
+              },
+            ),
+          ),
+        );
+    });
+
     final location = GoRouterState.of(context).matchedLocation;
     final selected = _indexFor(location);
     final isWide = MediaQuery.sizeOf(context).width >= 600;
