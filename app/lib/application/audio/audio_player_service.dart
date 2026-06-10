@@ -22,6 +22,7 @@ import 'package:media_kit/media_kit.dart' hide Track;
 import '../../domain/entities/track.dart';
 import '../../domain/repositories/catalog_repository.dart';
 import '../torrent/source_resolver.dart';
+import '../torrent/torrent_service.dart';
 
 const _logTag = 'librefy.audio';
 
@@ -36,6 +37,8 @@ class PlaybackSnapshot {
     required this.bufferedPosition,
     required this.duration,
     required this.usingP2P,
+    required this.p2pProgress,
+    required this.p2pPeers,
   });
 
   final List<Track> queue;
@@ -45,6 +48,10 @@ class PlaybackSnapshot {
   final Duration bufferedPosition;
   final Duration duration;
   final bool usingP2P;
+  /// 0.0 — 1.0; how much of the current torrent file is cached locally.
+  /// Meaningful only when [usingP2P] is true; 0 otherwise.
+  final double p2pProgress;
+  final int p2pPeers;
 
   Track? get current =>
       (currentIndex >= 0 && currentIndex < queue.length) ? queue[currentIndex] : null;
@@ -57,6 +64,8 @@ class PlaybackSnapshot {
     Duration? bufferedPosition,
     Duration? duration,
     bool? usingP2P,
+    double? p2pProgress,
+    int? p2pPeers,
   }) =>
       PlaybackSnapshot(
         queue: queue ?? this.queue,
@@ -66,6 +75,8 @@ class PlaybackSnapshot {
         bufferedPosition: bufferedPosition ?? this.bufferedPosition,
         duration: duration ?? this.duration,
         usingP2P: usingP2P ?? this.usingP2P,
+        p2pProgress: p2pProgress ?? this.p2pProgress,
+        p2pPeers: p2pPeers ?? this.p2pPeers,
       );
 
   static const empty = PlaybackSnapshot(
@@ -76,6 +87,8 @@ class PlaybackSnapshot {
     bufferedPosition: Duration.zero,
     duration: Duration.zero,
     usingP2P: false,
+    p2pProgress: 0,
+    p2pPeers: 0,
   );
 }
 
@@ -122,6 +135,20 @@ class AudioPlayerService {
   final _snapshotCtrl = StreamController<PlaybackSnapshot>.broadcast();
   final _errorCtrl = StreamController<PlaybackError>.broadcast();
   PlaybackSnapshot _snap = PlaybackSnapshot.empty;
+
+  // Currently-attached torrent session. Disposed when we switch tracks
+  // (with a small delay so libmpv has time to release its FD on the
+  // local HTTP server — otherwise we crash with "Callback invoked after
+  // it has been deleted" because libmpv's network thread still calls
+  // back into the dying handle).
+  TorrentSession? _activeSession;
+  StreamSubscription<TorrentStats>? _activeStatsSub;
+
+  // Serialise loads. We must not start opening track N+1 while N is
+  // still spinning up; media_kit's libmpv backend keeps file-handles
+  // open and can re-enter our FFI after we tear it down.
+  Future<void> _loadOp = Future.value();
+  int _generation = 0;
 
   Stream<PlaybackSnapshot> get snapshots => _snapshotCtrl.stream;
   Stream<PlaybackError> get errors => _errorCtrl.stream;
@@ -175,24 +202,72 @@ class AudioPlayerService {
     }
   }
 
+  /// Resolves the same URI media_kit would play for [trackId] but
+  /// without touching the player state. Used by the download flow so a
+  /// "save to device" tap on a magnet-backed track downloads from the
+  /// loopback torrent stream we're already maintaining.
+  ///
+  /// Returns the resolved URI. The caller does NOT own the
+  /// [TorrentSession] returned alongside — it lives as long as the
+  /// underlying torrent is in cache.
+  Future<({Uri uri, bool usingP2P})> resolveForDownload(String trackId) async {
+    final info = await _repo.resolveStream(trackId);
+    final resolved = await _resolver.resolve(info);
+    return (uri: resolved.uri, usingP2P: resolved.usingP2P);
+  }
+
   Future<void> dispose() async {
     for (final s in _subs) {
       await s.cancel();
+    }
+    await _activeStatsSub?.cancel();
+    _activeStatsSub = null;
+    final old = _activeSession;
+    _activeSession = null;
+    if (old != null) {
+      try {
+        await old.dispose();
+      } catch (_) {/* best effort */}
     }
     await _player.dispose();
     await _snapshotCtrl.close();
     await _errorCtrl.close();
   }
 
-  Future<void> _loadAndPlayCurrent() async {
+  /// Queues the load. Multiple rapid taps on next/previous collapse into
+  /// a single serialised chain — we never open() while a previous open()
+  /// is still resolving.
+  Future<void> _loadAndPlayCurrent() {
+    final gen = ++_generation;
+    _loadOp = _loadOp.then((_) => _runLoad(gen)).catchError((Object e, StackTrace st) {
+      _reportError('load chain crashed', cause: e, stack: st);
+    });
+    return _loadOp;
+  }
+
+  Future<void> _runLoad(int gen) async {
+    // If the user pressed next/prev again while we were waiting, skip
+    // this stale generation entirely.
+    if (gen != _generation) return;
+
     final track = _snap.current;
     if (track == null) return;
 
-    dev.log('▶ loadAndPlay id=${track.id} title="${track.title}"', name: _logTag);
+    dev.log('▶ loadAndPlay gen=$gen id=${track.id} title="${track.title}"',
+        name: _logTag);
+
+    // Stop the currently-playing source BEFORE we mutate any state so
+    // libmpv's network thread tears down its connection to the old URL
+    // before we close the torrent session that was serving it.
+    try {
+      await _player.stop();
+    } catch (e) {
+      dev.log('  player.stop ignored: $e', name: _logTag);
+    }
 
     try {
-      // Step 1 — ask the backend where to fetch the audio.
       final info = await _repo.resolveStream(track.id);
+      if (gen != _generation) return;
       dev.log(
         '  resolveStream → httpUrl=${info.httpUrl ?? "-"} '
         'magnet=${info.magnet?.isNotEmpty == true ? "yes" : "no"} '
@@ -200,22 +275,61 @@ class AudioPlayerService {
         name: _logTag,
       );
 
-      // Step 2 — pick best transport (P2P or HTTP).
       final resolved = await _resolver.resolve(info);
+      if (gen != _generation) {
+        // We got pre-empted — release the session we just opened (if any)
+        // so it doesn't leak.
+        if (resolved.session != null) {
+          await resolved.session!.dispose();
+        }
+        return;
+      }
       dev.log(
         '  source resolved → ${resolved.uri} (p2p=${resolved.usingP2P})',
         name: _logTag,
       );
 
-      // Step 3 — hand the URI to media_kit. `play: true` starts playback
-      // immediately. Older media_kit defaulted to true but we set it
-      // explicitly so behaviour cannot regress on upgrades.
-      await _player.open(Media(resolved.uri.toString()), play: true);
-      _emit(_snap.copyWith(usingP2P: resolved.usingP2P));
+      // Swap sessions: keep the previous one alive while libmpv finishes
+      // reading any in-flight bytes, then dispose it after a short grace
+      // period. This is the main fix for the "Callback invoked after it
+      // has been deleted" crash: libmpv's HTTP worker thread can still
+      // be reading from the old local server when we'd otherwise tear it
+      // down synchronously, which yanks a buffer out from under it.
+      final previousSession = _activeSession;
+      final previousStatsSub = _activeStatsSub;
+      _activeSession = resolved.session;
+      _activeStatsSub = null;
 
-      // Step 4 — defensive: some builds (especially fresh installs) need
-      // an explicit play() call right after open() to actually begin.
-      await _player.play();
+      // Reset peer/progress counters; subscribe to the new session if any.
+      _emit(_snap.copyWith(
+        usingP2P: resolved.usingP2P,
+        p2pPeers: 0,
+        p2pProgress: 0,
+      ));
+      if (resolved.session != null) {
+        _activeStatsSub = resolved.session!.stats.listen((s) {
+          if (gen != _generation) return;
+          _emit(_snap.copyWith(
+            p2pPeers: s.peers,
+            p2pProgress: s.progress,
+          ));
+        });
+      }
+
+      await _player.open(Media(resolved.uri.toString()), play: true);
+
+      if (previousStatsSub != null) {
+        await previousStatsSub.cancel();
+      }
+      if (previousSession != null) {
+        Future<void>.delayed(const Duration(seconds: 3), () async {
+          try {
+            await previousSession.dispose();
+          } catch (e) {
+            dev.log('  previousSession.dispose: $e', name: _logTag);
+          }
+        });
+      }
 
       unawaited(_repo.recordPlay(track.id));
     } catch (e, st) {
