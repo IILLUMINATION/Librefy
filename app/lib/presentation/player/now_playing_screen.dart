@@ -108,6 +108,7 @@ class NowPlayingScreen extends ConsumerWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
+                          _ShuffleButton(active: snap.shuffle, onTap: svc.toggleShuffle),
                           IconButton(
                             iconSize: 36,
                             onPressed: svc.previous,
@@ -131,6 +132,16 @@ class NowPlayingScreen extends ConsumerWidget {
                             onPressed: svc.next,
                             icon: const Icon(Icons.skip_next_rounded),
                           ),
+                          _RepeatButton(mode: snap.repeatMode, onTap: svc.cycleRepeatMode),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          LikeIconButton(track: t),
+                          const SizedBox(width: 8),
+                          AddToPlaylistButton(track: t),
                         ],
                       ),
                       if (t.attribution != null && t.attribution!.isNotEmpty) ...[
@@ -174,6 +185,42 @@ class _P2PChip extends StatelessWidget {
       avatar: const Icon(Icons.share_rounded, size: 16),
       label: Text(label),
       visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+class _ShuffleButton extends StatelessWidget {
+  const _ShuffleButton({required this.active, required this.onTap});
+  final bool active;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      tooltip: active ? 'Shuffle on' : 'Shuffle off',
+      icon: Icon(Icons.shuffle_rounded,
+          color: active ? scheme.primary : scheme.onSurfaceVariant),
+      onPressed: onTap,
+    );
+  }
+}
+
+class _RepeatButton extends StatelessWidget {
+  const _RepeatButton({required this.mode, required this.onTap});
+  final PlayerRepeatMode mode;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (icon, tooltip, active) = switch (mode) {
+      PlayerRepeatMode.off => (Icons.repeat_rounded, 'Repeat off', false),
+      PlayerRepeatMode.all => (Icons.repeat_rounded, 'Repeat all', true),
+      PlayerRepeatMode.one => (Icons.repeat_one_rounded, 'Repeat one', true),
+    };
+    return IconButton(
+      tooltip: tooltip,
+      icon: Icon(icon, color: active ? scheme.primary : scheme.onSurfaceVariant),
+      onPressed: onTap,
     );
   }
 }

@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'application/library/user_library.dart';
 import 'application/state/providers.dart';
 import 'core/network/api_base_url_store.dart';
 import 'core/router/app_router.dart';
@@ -38,6 +39,7 @@ Future<void> main() async {
     ProviderScope(
       overrides: [
         apiBaseUrlStoreProvider.overrideWithValue(urlStore),
+        sharedPreferencesProvider.overrideWithValue(prefs),
       ],
       child: const LibrefyApp(),
     ),

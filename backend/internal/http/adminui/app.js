@@ -150,9 +150,59 @@ function renderTracks() {
 }
 $("#trackSearch").addEventListener("input", renderTracks);
 $("#newTrackBtn").addEventListener("click", () => openTrackModal(null));
+$("#importUrlBtn").addEventListener("click", async () => {
+  const url = prompt(
+    "Paste a rutracker topic URL.\n\n" +
+    "We'll fetch the page, extract the magnet + metadata, and prefill " +
+    "the New Track form so you can review/save."
+  );
+  if (!url) return;
+  let parsed;
+  try {
+    parsed = await api.get(
+      "/import/rutracker?url=" + encodeURIComponent(url.trim())
+    );
+  } catch (e) {
+    alert("Import failed: " + e.message);
+    return;
+  }
+  // Map parser result → New Track defaults.
+  const prefill = {
+    id: slugify(parsed.artist || "") + "-" + slugify(parsed.title || parsed.album || ""),
+    title: parsed.title || parsed.album || "",
+    artist: parsed.artist || "",
+    album: parsed.album || "",
+    durationMs: 0,
+    artworkUrl: parsed.artworkUrl || "",
+    streamUrl: "",
+    magnet: parsed.magnet || "",
+    infoHash: parsed.infoHash || "",
+    license: {
+      code: "CC-BY-4.0",
+      name: "Creative Commons Attribution 4.0",
+      url: "https://creativecommons.org/licenses/by/4.0/",
+    },
+    attribution: parsed.artist
+      ? `${parsed.title || parsed.album || "Track"} by ${parsed.artist}`
+      : "",
+    tags: parsed.tags || [],
+  };
+  openTrackModal(prefill);
+});
+
+function slugify(s) {
+  return (s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9а-я\s-]+/gi, "")
+    .replace(/\s+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
 
 function openTrackModal(t) {
-  const isEdit = !!t;
+  // "Edit" mode iff this track already exists on the server (its id is
+  // in our cache). Prefilled drafts from importers are treated as new.
+  const isEdit = !!t && tracksCache.some((c) => c.id === t.id);
   const v = t || {
     id: "", title: "", artist: "", album: "", durationMs: 0, artworkUrl: "",
     streamUrl: "", magnet: "", infoHash: "",

@@ -26,6 +26,16 @@ import '../torrent/torrent_service.dart';
 
 const _logTag = 'librefy.audio';
 
+/// What the player does when the current track ends.
+///
+/// Named PlayerRepeatMode (not just PlayerRepeatMode) to avoid colliding with
+/// Flutter material's animation PlayerRepeatMode enum.
+enum PlayerRepeatMode {
+  off,  // advance to next; stop after the last track
+  one,  // replay current track forever
+  all,  // wrap around to track 0 after the last
+}
+
 /// Snapshot of player state, kept transport-agnostic so the UI does
 /// not need to import media_kit.
 class PlaybackSnapshot {
@@ -39,6 +49,8 @@ class PlaybackSnapshot {
     required this.usingP2P,
     required this.p2pProgress,
     required this.p2pPeers,
+    required this.repeatMode,
+    required this.shuffle,
   });
 
   final List<Track> queue;
@@ -48,10 +60,10 @@ class PlaybackSnapshot {
   final Duration bufferedPosition;
   final Duration duration;
   final bool usingP2P;
-  /// 0.0 — 1.0; how much of the current torrent file is cached locally.
-  /// Meaningful only when [usingP2P] is true; 0 otherwise.
   final double p2pProgress;
   final int p2pPeers;
+  final PlayerRepeatMode repeatMode;
+  final bool shuffle;
 
   Track? get current =>
       (currentIndex >= 0 && currentIndex < queue.length) ? queue[currentIndex] : null;
@@ -66,6 +78,8 @@ class PlaybackSnapshot {
     bool? usingP2P,
     double? p2pProgress,
     int? p2pPeers,
+    PlayerRepeatMode? repeatMode,
+    bool? shuffle,
   }) =>
       PlaybackSnapshot(
         queue: queue ?? this.queue,
@@ -77,6 +91,8 @@ class PlaybackSnapshot {
         usingP2P: usingP2P ?? this.usingP2P,
         p2pProgress: p2pProgress ?? this.p2pProgress,
         p2pPeers: p2pPeers ?? this.p2pPeers,
+        repeatMode: repeatMode ?? this.repeatMode,
+        shuffle: shuffle ?? this.shuffle,
       );
 
   static const empty = PlaybackSnapshot(
@@ -89,6 +105,8 @@ class PlaybackSnapshot {
     usingP2P: false,
     p2pProgress: 0,
     p2pPeers: 0,
+    repeatMode: PlayerRepeatMode.off,
+    shuffle: false,
   );
 }
 
@@ -163,8 +181,9 @@ class AudioPlayerService {
   }
 
   Future<void> next() async {
-    if (_snap.currentIndex + 1 >= _snap.queue.length) return;
-    _emit(_snap.copyWith(currentIndex: _snap.currentIndex + 1));
+    final nextIndex = _pickNextIndex(auto: false);
+    if (nextIndex == null) return;
+    _emit(_snap.copyWith(currentIndex: nextIndex));
     await _loadAndPlayCurrent();
   }
 
@@ -180,6 +199,50 @@ class AudioPlayerService {
     }
     _emit(_snap.copyWith(currentIndex: _snap.currentIndex - 1));
     await _loadAndPlayCurrent();
+  }
+
+  /// Cycle: off → all → one → off
+  void cycleRepeatMode() {
+    final next = switch (_snap.repeatMode) {
+      PlayerRepeatMode.off => PlayerRepeatMode.all,
+      PlayerRepeatMode.all => PlayerRepeatMode.one,
+      PlayerRepeatMode.one => PlayerRepeatMode.off,
+    };
+    _emit(_snap.copyWith(repeatMode: next));
+  }
+
+  void toggleShuffle() {
+    _emit(_snap.copyWith(shuffle: !_snap.shuffle));
+  }
+
+  /// Returns the queue index to play next, or null if the queue is at
+  /// its end and repeatMode forbids wrapping.
+  ///
+  /// [auto] is true when this was invoked from the player's "completed"
+  /// event (so repeat.one applies); false when triggered by the user
+  /// hitting the next button (skip past current track regardless).
+  int? _pickNextIndex({required bool auto}) {
+    if (_snap.queue.isEmpty) return null;
+
+    if (auto && _snap.repeatMode == PlayerRepeatMode.one) {
+      return _snap.currentIndex;
+    }
+
+    if (_snap.shuffle) {
+      if (_snap.queue.length == 1) return 0;
+      // Pick any other index uniformly at random.
+      final rnd = (DateTime.now().microsecondsSinceEpoch ^ hashCode).abs();
+      var pick = rnd % _snap.queue.length;
+      if (pick == _snap.currentIndex) {
+        pick = (pick + 1) % _snap.queue.length;
+      }
+      return pick;
+    }
+
+    final candidate = _snap.currentIndex + 1;
+    if (candidate < _snap.queue.length) return candidate;
+    if (_snap.repeatMode == PlayerRepeatMode.all) return 0;
+    return null;
   }
 
   Future<void> togglePlay() async {
@@ -359,7 +422,15 @@ class AudioPlayerService {
     }));
     _subs.add(_player.stream.completed.listen((done) {
       dev.log('player.completed → $done', name: _logTag);
-      if (done) unawaited(next());
+      if (!done) return;
+      final auto = _pickNextIndex(auto: true);
+      if (auto == null) {
+        // Queue end with repeat off → stop here.
+        _emit(_snap.copyWith(playing: false));
+        return;
+      }
+      _emit(_snap.copyWith(currentIndex: auto));
+      unawaited(_loadAndPlayCurrent());
     }));
     // media_kit emits an `error` stream of strings whenever libmpv reports
     // something. We forward those to the UI / log so it's obvious what

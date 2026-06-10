@@ -11,6 +11,7 @@ import '../../presentation/common/app_shell.dart';
 import '../../presentation/home/home_screen.dart';
 import '../../presentation/library/library_screen.dart';
 import '../../presentation/library/playlist_detail_screen.dart';
+import '../../presentation/library/user_playlist_detail_screen.dart';
 import '../../presentation/player/now_playing_screen.dart';
 import '../../presentation/search/search_screen.dart';
 import '../../presentation/settings/deploy_guide_screen.dart';
@@ -31,6 +32,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/playlist/:id',
             builder: (context, state) => PlaylistDetailScreen(
               id: state.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
+            path: '/library/playlist/:id',
+            builder: (context, state) => UserPlaylistDetailScreen(
+              playlistId: state.pathParameters['id']!,
             ),
           ),
         ],

@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/librefy/librefy/backend/internal/domain"
+	"github.com/librefy/librefy/backend/internal/importers/rutracker"
 	"github.com/librefy/librefy/backend/internal/service"
 )
 
@@ -84,6 +85,11 @@ func mountAdmin(r chi.Router, svc *service.Service, adminToken string) {
 			r.Delete("/playlists/{id}", h.deletePlaylist)
 
 			r.Get("/seed/export", h.exportSeed)
+
+			// Convenience importers — translate a foreign URL into a
+			// ready-to-upsert Track payload. The operator still has to
+			// review and click "Save" in the admin UI.
+			r.Get("/import/rutracker", h.importRutracker)
 		})
 	})
 }
@@ -238,6 +244,21 @@ func (h *adminHandlers) deletePlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *adminHandlers) importRutracker(w http.ResponseWriter, r *http.Request) {
+	rawURL := strings.TrimSpace(r.URL.Query().Get("url"))
+	if rawURL == "" {
+		writeError(w, http.StatusBadRequest, errors.New("url query parameter required"))
+		return
+	}
+	parser := rutracker.NewParser()
+	res, err := parser.Parse(r.Context(), rawURL)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (h *adminHandlers) exportSeed(w http.ResponseWriter, r *http.Request) {

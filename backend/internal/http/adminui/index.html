@@ -48,7 +48,10 @@
     <section id="tracks" class="tab card hidden">
       <div class="row between center">
         <h2>Tracks</h2>
-        <button id="newTrackBtn" class="primary">+ New track</button>
+        <div class="row gap">
+          <button id="importUrlBtn">Import from URL</button>
+          <button id="newTrackBtn" class="primary">+ New track</button>
+        </div>
       </div>
       <input id="trackSearch" placeholder="Filter by title or artist…" class="filter" />
       <table id="tracksTable">
