@@ -281,20 +281,40 @@ class AudioPlayerService {
 
   Future<void> dispose() async {
     for (final s in _subs) {
-      await s.cancel();
+      try {
+        await s.cancel();
+      } catch (_) {}
     }
-    await _activeStatsSub?.cancel();
+    try {
+      await _activeStatsSub?.cancel();
+    } catch (_) {}
     _activeStatsSub = null;
     final old = _activeSession;
     _activeSession = null;
     if (old != null) {
-      try {
-        await old.dispose();
-      } catch (_) {/* best effort */}
+      // Best-effort; never throw out of dispose or hot-restart crashes.
+      unawaited(Future(() async {
+        try {
+          await old.dispose();
+        } catch (_) {}
+      }));
     }
-    await _player.dispose();
-    await _snapshotCtrl.close();
-    await _errorCtrl.close();
+    // Stop playback first so libmpv's worker thread releases its sources
+    // before we tear the player down. Wrap each step independently —
+    // hot-restart in particular invokes us with libmpv still mid-callback,
+    // and an exception here aborts the whole isolate.
+    try {
+      await _player.stop();
+    } catch (_) {}
+    try {
+      await _player.dispose();
+    } catch (_) {}
+    try {
+      await _snapshotCtrl.close();
+    } catch (_) {}
+    try {
+      await _errorCtrl.close();
+    } catch (_) {}
   }
 
   /// Queues the load. Multiple rapid taps on next/previous collapse into

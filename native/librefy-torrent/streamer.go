@@ -49,6 +49,11 @@ func (s *streamer) Close() error {
 // URLFor returns the loopback URL serving the file at fileIdx of the
 // torrent identified by handle. The caller is expected to call this
 // AFTER lt_wait_metadata, otherwise file count is unknown.
+//
+// If [fileIdx] points at a non-audio file (cover.jpg, log.txt, …) we
+// remap it to the nearest audio file in the torrent. This makes the
+// admin UX forgiving: file_index=0 still Just Works on releases that
+// store an album cover as file 0.
 func (s *streamer) URLFor(handle int64, fileIdx int) (string, error) {
 	t, ok := s.mgr.lookup(handle)
 	if !ok {
@@ -61,10 +66,35 @@ func (s *streamer) URLFor(handle int64, fileIdx int) (string, error) {
 	if fileIdx < 0 || fileIdx >= len(files) {
 		return "", fmt.Errorf("file index %d out of range", fileIdx)
 	}
+	if !isAudioFile(files[fileIdx].Path()) {
+		// Search forwards from the requested index, wrap around once.
+		remapped := -1
+		for off := 1; off <= len(files); off++ {
+			j := (fileIdx + off) % len(files)
+			if isAudioFile(files[j].Path()) {
+				remapped = j
+				break
+			}
+		}
+		if remapped < 0 {
+			return "", errors.New("torrent contains no audio files")
+		}
+		fileIdx = remapped
+	}
 	// Use the info-hash as the route key — it's the only stable id that
 	// the manager can resolve back to a torrent (handles are per-process).
 	return fmt.Sprintf("http://127.0.0.1:%d/%s/%d",
 		s.port, t.InfoHash().HexString(), fileIdx), nil
+}
+
+func isAudioFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".mp3", ".m4a", ".mp4", ".flac", ".ogg", ".opus", ".wav",
+		".aac", ".ape", ".wv", ".aif", ".aiff":
+		return true
+	}
+	return false
 }
 
 // HTTP request path:  /<info_hash_hex>/<file_idx>
@@ -89,6 +119,23 @@ func (s *streamer) handle(w http.ResponseWriter, r *http.Request) {
 	if idx < 0 || idx >= len(files) {
 		http.Error(w, "bad file index", http.StatusBadRequest)
 		return
+	}
+	// Audio-file guard, same as URLFor: a saved URL might point at a
+	// jpeg / nfo after an upstream metadata change.
+	if !isAudioFile(files[idx].Path()) {
+		remapped := -1
+		for off := 1; off <= len(files); off++ {
+			j := (idx + off) % len(files)
+			if isAudioFile(files[j].Path()) {
+				remapped = j
+				break
+			}
+		}
+		if remapped < 0 {
+			http.Error(w, "no audio file in torrent", http.StatusNotFound)
+			return
+		}
+		idx = remapped
 	}
 	f := files[idx]
 	// Prioritise the file we're about to serve — other files in the

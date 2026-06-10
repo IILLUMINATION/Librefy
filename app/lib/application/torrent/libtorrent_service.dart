@@ -31,6 +31,16 @@ import 'torrent_service.dart';
 
 const _logTag = 'librefy.torrent';
 
+// Process-global state intentionally kept OUTSIDE the Riverpod scope so
+// hot-restart (which throws away ProviderScope and tries to recreate
+// everything) doesn't double-init the native session. media_kit + libmpv
+// hold onto our HTTP-streamer port through a worker thread, and
+// reinitialising while libmpv is still polling produces the dreaded
+// "Callback invoked after it has been deleted" crash.
+LibtorrentBindings? _globalBindings;
+int _globalSessionId = -1;
+bool _globalInitFailed = false;
+
 class LibtorrentService implements TorrentService {
   LibtorrentService._(this._bindings, this._sessionId);
 
@@ -47,10 +57,22 @@ class LibtorrentService implements TorrentService {
   /// Attempt to load the native library and create a session. Returns
   /// null if the platform doesn't ship it or initialization failed —
   /// callers should fall back to [HttpOnlyTorrentService].
+  ///
+  /// The native session is cached at top-level scope so a Flutter
+  /// hot-restart (which tosses out the Riverpod tree) doesn't try to
+  /// create a second session while libmpv is still polling the first.
   static Future<LibtorrentService?> tryInit() async {
+    if (_globalInitFailed) return null;
+    if (_globalBindings != null && _globalSessionId >= 0) {
+      dev.log('reusing existing native session (sid=$_globalSessionId)',
+          name: _logTag);
+      return LibtorrentService._(_globalBindings!, _globalSessionId);
+    }
+
     final bindings = LibtorrentBindings.tryOpen();
     if (bindings == null) {
       dev.log('native libtorrent unavailable on this platform', name: _logTag);
+      _globalInitFailed = true;
       return null;
     }
     final dir = await _resolveCacheDir();
@@ -62,8 +84,11 @@ class LibtorrentService implements TorrentService {
       final sid = bindings.ltCreate(dirPtr, 0);
       if (sid < 0) {
         dev.log('ltCreate failed: ${bindings.lastError()}', name: _logTag);
+        _globalInitFailed = true;
         return null;
       }
+      _globalBindings = bindings;
+      _globalSessionId = sid;
       dev.log('libtorrent session up (sid=$sid, cache=$cacheDir)', name: _logTag);
       return LibtorrentService._(bindings, sid);
     } finally {
@@ -159,10 +184,15 @@ class LibtorrentService implements TorrentService {
   }
 
   Future<void> dispose() async {
+    // NOTE: we intentionally do NOT call ltDestroy here. The native
+    // session is owned by top-level state that survives Riverpod
+    // teardown — destroying it during hot-restart is precisely what
+    // produces the libmpv "Callback after deleted" crash. The OS
+    // reclaims the session when the process exits.
     if (_closed) return;
     _closed = true;
-    _bindings.ltDestroy(_sessionId);
-    dev.log('libtorrent session destroyed', name: _logTag);
+    dev.log('LibtorrentService disposed (native session kept alive)',
+        name: _logTag);
   }
 
   static Future<String> _resolveCacheDir() async {

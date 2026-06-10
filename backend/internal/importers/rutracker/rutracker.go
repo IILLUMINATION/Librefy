@@ -213,19 +213,37 @@ var htmlEntityReplacer = strings.NewReplacer(
 	"&nbsp;", " ",
 )
 
+// trackInlinePattern is the same shape as trackLinePattern but anchors
+// on word boundaries so we can extract entries from a single blob of
+// text where rutracker shipped the whole tracklist on one HTML line.
+var trackInlinePattern = regexp.MustCompile(
+	`(?:^|[\s\)\]])\s*(\d{1,3})\s*[.):\-]\s+([^\n\[]+?)\s+[-–—]\s+([^\n\[]+?)\s*\[\s*(\d{1,3}):(\d{2})(?::(\d{2}))?\s*\]`,
+)
+
 // extractTracklist scans the post body for a numbered tracklist and
 // returns the parsed entries. We assume the file order in the torrent
 // follows the tracklist order (this is overwhelmingly the convention
 // on rutracker audio uploads); FileIndex is therefore set to Position-1
 // as a sane default. The client may override it after listing the
 // torrent's actual file table.
+//
+// Rutracker emits tracklists in two flavours: properly broken into
+// lines, or jammed onto one line with [duration] markers as the only
+// separator. We try the line-based parse first, then fall back to a
+// duration-anchored regex sweep.
 func extractTracklist(body string) []TrackEntry {
 	body = htmlEntityReplacer.Replace(body)
-	lines := strings.Split(body, "\n")
 
+	if entries := parseLineByLine(body); len(entries) >= 2 {
+		return entries
+	}
+	return parseInline(body)
+}
+
+func parseLineByLine(body string) []TrackEntry {
 	var out []TrackEntry
 	var lastPos int
-	for _, line := range lines {
+	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || len(line) > 300 {
 			continue
@@ -234,53 +252,83 @@ func extractTracklist(body string) []TrackEntry {
 		if m == nil {
 			continue
 		}
-		pos, _ := strconv.Atoi(m[1])
-		// Skip nonsense (positions must be roughly sequential and small).
-		if pos <= 0 || pos > 500 {
+		entry, ok := buildEntry(m, lastPos)
+		if !ok {
 			continue
 		}
-		// Avoid picking up date-like patterns or random "1 - foo" lines:
-		// require positions to roughly ascend with at most a small jump.
-		if pos > lastPos+5 && lastPos > 0 {
-			continue
-		}
-		artist := strings.TrimSpace(m[2])
-		title := strings.TrimSpace(m[3])
-		if artist == "" || title == "" || len(artist) > 120 || len(title) > 200 {
-			continue
-		}
-		var durMs int64
-		if m[4] != "" && m[5] != "" {
-			h, mm, ss := 0, 0, 0
-			if m[6] != "" {
-				h, _ = strconv.Atoi(m[4])
-				mm, _ = strconv.Atoi(m[5])
-				ss, _ = strconv.Atoi(m[6])
-			} else {
-				mm, _ = strconv.Atoi(m[4])
-				ss, _ = strconv.Atoi(m[5])
-			}
-			durMs = int64((h*3600 + mm*60 + ss) * 1000)
-		}
-		out = append(out, TrackEntry{
-			Position:   pos,
-			FileIndex:  pos - 1,
-			Title:      title,
-			Artist:     artist,
-			DurationMS: durMs,
-		})
-		lastPos = pos
+		out = append(out, entry)
+		lastPos = entry.Position
 	}
-
-	// Sanity check: at least 2 entries, and positions cover a contiguous
-	// run from 1. Otherwise we probably matched noise.
-	if len(out) < 2 {
-		return nil
-	}
-	if out[0].Position != 1 {
+	if len(out) < 2 || out[0].Position != 1 {
 		return nil
 	}
 	return out
+}
+
+// parseInline handles posts where the entire tracklist is on one line
+// because rutracker rendered them without <br>. We rely on the [m:ss]
+// duration marker that every entry carries to find the boundary
+// between "Artist - Title [3:21]" and the start of the next "NN.".
+func parseInline(body string) []TrackEntry {
+	matches := trackInlinePattern.FindAllStringSubmatch(body, -1)
+	var out []TrackEntry
+	var lastPos int
+	for _, m := range matches {
+		entry, ok := buildEntry(m, lastPos)
+		if !ok {
+			continue
+		}
+		out = append(out, entry)
+		lastPos = entry.Position
+	}
+	if len(out) < 2 || out[0].Position != 1 {
+		return nil
+	}
+	return out
+}
+
+// buildEntry materialises a regex match (in either line-by-line or
+// inline form — they capture the same five-or-six submatch shape) into
+// a validated TrackEntry. Returns ok=false to signal "skip this match".
+func buildEntry(m []string, lastPos int) (TrackEntry, bool) {
+	pos, _ := strconv.Atoi(m[1])
+	if pos <= 0 || pos > 500 {
+		return TrackEntry{}, false
+	}
+	// Allow a small jump (re-issues, hidden tracks) but reject huge gaps
+	// — those usually mean we matched something unrelated.
+	if pos > lastPos+5 && lastPos > 0 {
+		return TrackEntry{}, false
+	}
+	artist := strings.TrimSpace(m[2])
+	title := strings.TrimSpace(m[3])
+	// Inline matches sometimes pick up trailing punctuation from the
+	// previous track's duration brace. Trim leading/trailing junk.
+	artist = strings.Trim(artist, " .,:;-–—")
+	title = strings.Trim(title, " .,:;-–—")
+	if artist == "" || title == "" || len(artist) > 120 || len(title) > 200 {
+		return TrackEntry{}, false
+	}
+	var durMs int64
+	if len(m) >= 6 && m[4] != "" && m[5] != "" {
+		h, mm, ss := 0, 0, 0
+		if len(m) >= 7 && m[6] != "" {
+			h, _ = strconv.Atoi(m[4])
+			mm, _ = strconv.Atoi(m[5])
+			ss, _ = strconv.Atoi(m[6])
+		} else {
+			mm, _ = strconv.Atoi(m[4])
+			ss, _ = strconv.Atoi(m[5])
+		}
+		durMs = int64((h*3600 + mm*60 + ss) * 1000)
+	}
+	return TrackEntry{
+		Position:   pos,
+		FileIndex:  pos - 1,
+		Title:      title,
+		Artist:     artist,
+		DurationMS: durMs,
+	}, true
 }
 
 // ------------------ HTML helpers ------------------
@@ -350,6 +398,9 @@ func findFirstTag(n *html.Node, tag string) *html.Node {
 	return found
 }
 
+// textOf flattens an HTML subtree to text, preserving line structure:
+// <br>, <p>, <li>, <div> all imply a newline so the downstream
+// tracklist parser sees the same lines a browser would render.
 func textOf(n *html.Node) string {
 	if n == nil {
 		return ""
@@ -363,8 +414,20 @@ func textOf(n *html.Node) string {
 		if node.Type == html.TextNode {
 			sb.WriteString(node.Data)
 		}
+		if node.Type == html.ElementNode {
+			switch node.Data {
+			case "br", "p", "li", "div", "tr":
+				sb.WriteByte('\n')
+			}
+		}
 		for c := node.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
+		}
+		if node.Type == html.ElementNode {
+			switch node.Data {
+			case "p", "li", "div", "tr":
+				sb.WriteByte('\n')
+			}
 		}
 	}
 	walk(n)
