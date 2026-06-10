@@ -12,11 +12,19 @@ import 'package:go_router/go_router.dart';
 
 import '../../application/audio/audio_providers.dart';
 import 'mini_player.dart';
+import 'p2p_intro_dialog.dart';
 
-class AppShell extends ConsumerWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({required this.child, super.key});
 
   final Widget child;
+
+  @override
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  bool _introScheduled = false;
 
   static const _destinations = <_Dest>[
     _Dest('/home', Icons.home_outlined, Icons.home_rounded, 'Home'),
@@ -32,8 +40,18 @@ class AppShell extends ConsumerWidget {
     return 0;
   }
 
+  void _scheduleIntroOnce() {
+    if (_introScheduled) return;
+    _introScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) maybeShowP2pIntro(context, ref);
+    });
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    _scheduleIntroOnce();
+
     // Surface playback errors as a snackbar with a copy-to-clipboard
     // action so users can paste the failure into a bug report.
     ref.listen(playbackErrorProvider, (_, next) {
@@ -63,7 +81,7 @@ class AppShell extends ConsumerWidget {
 
     final body = Column(
       children: [
-        Expanded(child: child),
+        Expanded(child: widget.child),
         const MiniPlayer(),
       ],
     );

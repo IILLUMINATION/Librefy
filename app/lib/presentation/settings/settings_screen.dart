@@ -6,8 +6,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../application/state/providers.dart';
+import '../common/p2p_intro_dialog.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -89,6 +91,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => context.push('/settings/deploy'),
+            ),
+            const Divider(),
+            SwitchListTile(
+              secondary: const Icon(Icons.share_rounded),
+              title: const Text('Peer-assisted streaming'),
+              subtitle: const Text(
+                'Play magnet-linked libre tracks directly from peers.',
+              ),
+              value: ref.watch(p2pEnabledProvider),
+              onChanged: (v) async {
+                ref.read(p2pEnabledProvider.notifier).state = v;
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool('librefy.p2p.enabled.v1', v);
+              },
             ),
             const Divider(),
             const ListTile(

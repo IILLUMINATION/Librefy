@@ -39,9 +39,11 @@ curl http://194.31.223.9:8088/api/v1/trending?limit=3
 - 🎵 Stream Creative Commons / public-domain music with per-track licence display
 - 🎨 Material 3, dynamic colour, responsive (NavigationBar ↔ NavigationRail)
 - 🔍 Debounced search across the local catalog and the Internet Archive
-- 📱 Background playback, lock-screen controls (Android), system mediakit (Linux)
+- 🌍 **True peer-assisted delivery** — magnet-linked tracks play directly
+  from the BitTorrent swarm via an embedded native bridge (anacrolix/torrent
+  + dart:ffi). Backend never proxies audio. See [`docs/P2P.md`](docs/P2P.md).
+- 📱 In-app playback for Android & Linux desktop via media_kit
 - 🧩 Pluggable provider system (`MusicProvider` interface, mirrored backend/app)
-- 🌐 Torrent abstraction layer ready for libtorrent / WebTorrent
 - 🛠️ Built-in admin web UI for managing tracks & playlists
 - 🔒 Privacy-first: no accounts, no telemetry, anonymous-only play counters
 
@@ -70,20 +72,24 @@ VS Code: `Ctrl+Shift+B` runs the same task (see `.vscode/tasks.json`).
 ### Flutter app — Linux
 
 ```bash
+./scripts/setup.sh           # one-shot: installs libmpv if missing
+./scripts/build-native.sh    # build liblibrefy_torrent.so (~30s)
 ./scripts/run-app-linux.sh
 ```
 
-> First run will offer to install `libmpv` automatically (the only native
-> dependency on Linux). You can also pre-install it once with
-> `./scripts/setup.sh` — Android builds need nothing extra.
+> First run also invokes `setup.sh` for you if `libmpv` is missing.
+> The native torrent bridge is optional — without it, magnet-only tracks
+> show a friendly "P2P unavailable" snackbar and HTTP fallback streams
+> still work.
 
 ### Flutter app — Android
 
 ```bash
-cd app
-flutter pub get
-flutter run -d <your-device-or-emulator>
+./scripts/build-native-android.sh   # cross-compile native lib (~1 min)
+cd app && flutter run -d <device>
 ```
+
+Requires `ANDROID_NDK_HOME` (auto-detected at `~/Android/Sdk/ndk/<latest>`).
 
 > Android emulator → `http://10.0.2.2:8080` is used automatically.
 

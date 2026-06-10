@@ -28,6 +28,9 @@ dependencies:
   media_kit: ^1.1.11
   media_kit_libs_audio: ^1.0.5            # picks the right libs per platform
 
+  # FFI for the native libtorrent bridge.
+  ffi: ^2.1.3
+
   # Filesystem
   path_provider: ^2.1.4
   shared_preferences: ^2.3.2

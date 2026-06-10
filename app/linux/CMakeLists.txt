@@ -106,6 +106,22 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
     COMPONENT Runtime)
 endforeach(bundled_library)
 
+# Bundle the Librefy native torrent bridge alongside the runner's RPATH
+# ($ORIGIN/lib), if it has been built. dart:ffi DynamicLibrary.open()
+# searches the same directory.
+set(LIBREFY_TORRENT_LIB "${CMAKE_CURRENT_SOURCE_DIR}/libs/liblibrefy_torrent.so")
+if(EXISTS "${LIBREFY_TORRENT_LIB}")
+  install(FILES "${LIBREFY_TORRENT_LIB}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+  message(STATUS "Librefy: bundling native torrent lib")
+else()
+  message(WARNING
+    "Librefy: liblibrefy_torrent.so not found in app/linux/libs/. "
+    "Peer-assisted delivery will fall back to HTTP-only. Run "
+    "`scripts/build-native.sh` to build it.")
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
