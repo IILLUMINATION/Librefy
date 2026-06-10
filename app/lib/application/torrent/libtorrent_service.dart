@@ -90,6 +90,38 @@ class _AddMagnetResult {
   final String? error;
 }
 
+/// Stream-URL-only worker used when we already have a handle for this
+/// magnet (i.e. we previously opened it inside the same app session and
+/// just want a different fileIndex). Skipping add_magnet + wait_metadata
+/// matters a lot in practice: with 24-track FLAC albums the wait can be
+/// 30–120 s on a cold swarm; re-using the handle drops every track
+/// switch after the first to a single FFI call.
+class _StreamUrlResult {
+  _StreamUrlResult({required this.streamUrl, required this.error});
+  final String? streamUrl;
+  final String? error;
+}
+
+_StreamUrlResult _streamUrlOnlyWorker(
+    (int sid, int handle, int fileIndex) args) {
+  final bindings = LibtorrentBindings.tryOpen();
+  if (bindings == null) {
+    return _StreamUrlResult(
+        streamUrl: null, error: 'dlopen failed inside worker isolate');
+  }
+  final (sid, handle, fileIndex) = args;
+  final urlPtr = bindings.ltStreamUrl(sid, handle, fileIndex);
+  if (urlPtr.address == 0) {
+    return _StreamUrlResult(
+      streamUrl: null,
+      error: 'stream_url: ${bindings.lastError() ?? "null pointer"}',
+    );
+  }
+  final url = urlPtr.toDartString();
+  bindings.ltFreeCString(urlPtr);
+  return _StreamUrlResult(streamUrl: url, error: null);
+}
+
 _AddMagnetResult _addMagnetWorker(
     (int sid, String magnet, int fileIndex, int metadataTimeoutMs) args) {
   final bindings = LibtorrentBindings.tryOpen();
@@ -160,7 +192,20 @@ class LibtorrentService implements TorrentService {
   bool _closed = false;
 
   /// How long to wait for torrent metadata before giving up.
-  static const metadataTimeout = Duration(seconds: 45);
+  ///
+  /// 45 s was the original value — fine for healthy swarms but way too
+  /// short for the realistic Librefy use-case: an operator imports a
+  /// FLAC album from a small rutracker thread with 0–2 seeders. Cold
+  /// DHT bootstrap on Android easily takes 60–120 s before the first
+  /// peer is reachable, and then a few more seconds to actually pull
+  /// the .torrent metadata. With the old timeout the user got a
+  /// "P2P-only, couldn't open" snackbar even though the magnet was
+  /// perfectly valid and would have worked given another minute.
+  ///
+  /// 180 s is the new ceiling. We still want a hard upper bound so
+  /// genuinely dead magnets eventually fail loud instead of hanging
+  /// the loading spinner forever.
+  static const metadataTimeout = Duration(seconds: 180);
 
   /// Attempt to load the native library and create a session. Returns
   /// null if the platform doesn't ship it or initialization failed —
@@ -240,25 +285,52 @@ class LibtorrentService implements TorrentService {
     if (_closed) {
       throw StateError('LibtorrentService is disposed');
     }
-    dev.log('openMagnet: file=$fileIndex, dispatching to worker isolate…',
-        name: _logTag);
-
     final sid = _sessionId;
+
+    // Handle reuse: if we already opened this magnet earlier in this
+    // app session, the native swarm is still alive (we deliberately do
+    // NOT call ltRelease on TorrentSession.dispose — see the comment
+    // below). Skip the expensive add-magnet + wait-metadata round-trip
+    // and just ask the native streamer for the URL of the requested
+    // file. This is what makes track-to-track switches inside one
+    // album feel instant instead of hanging on every change while we
+    // re-fetch metadata from DHT.
+    final existing = _magnetToHandle[magnet];
+    if (existing != null) {
+      dev.log('openMagnet: cache hit (handle=$existing, file=$fileIndex)',
+          name: _logTag);
+      final handle = existing;
+      final res = await Isolate.run(
+        () => _streamUrlOnlyWorker((sid, handle, fileIndex)),
+      );
+      if (res.error != null || res.streamUrl == null) {
+        // Cache may be stale (handle pruned native-side). Drop it and
+        // fall through to the slow path so the user still gets playback.
+        dev.log('cached handle stale, will re-add: ${res.error}',
+            name: _logTag);
+        _magnetToHandle.remove(magnet);
+      } else {
+        return TorrentSession(
+          localUri: Uri.parse(res.streamUrl!),
+          dispose: _noopSessionDispose,
+          stats: _statsStream(handle),
+        );
+      }
+    }
+
+    dev.log('openMagnet: cold path (file=$fileIndex)', name: _logTag);
     final timeoutMs = metadataTimeout.inMilliseconds;
     // Run the entire add → wait-metadata → stream-url chain in a
-    // worker isolate. wait_metadata alone can block up to 45 s; doing
-    // it on the UI isolate is what produced the ANRs on Android.
+    // worker isolate. wait_metadata alone can block up to 180 s now;
+    // doing it on the UI isolate is what produced the ANRs on Android.
     final result = await Isolate.run(
       () => _addMagnetWorker((sid, magnet, fileIndex, timeoutMs)),
     );
 
     if (result.error != null) {
-      // Best-effort cleanup if we got a partial handle.
-      if (result.handle >= 0) {
-        try {
-          _bindings.ltRelease(sid, result.handle);
-        } catch (_) {/* ignore */}
-      }
+      // Don't ltRelease here either — see the comment on
+      // _noopSessionDispose. The handle (if we got one) stays
+      // registered in the native session and may be retried.
       throw Exception(result.error);
     }
     final handle = result.handle;
@@ -272,20 +344,48 @@ class LibtorrentService implements TorrentService {
 
     return TorrentSession(
       localUri: Uri.parse(url),
-      dispose: () async {
-        _bindings.ltRelease(sid, handle);
-        _magnetToHandle.remove(magnet);
-      },
+      // See _noopSessionDispose: we intentionally keep the native
+      // handle alive past the session that opened it.
+      dispose: _noopSessionDispose,
       stats: _statsStream(handle),
     );
   }
 
+  /// We intentionally do NOT call ltRelease when a TorrentSession is
+  /// disposed. Two reasons:
+  ///
+  ///  1. A single album typically maps to one magnet with many tracks.
+  ///     Releasing the handle when the user skips to the next track
+  ///     means every skip re-pays the DHT + wait-metadata cost
+  ///     (30–120 s on cold swarms). Reuse drops that to a single FFI
+  ///     call.
+  ///
+  ///  2. media_kit's libmpv worker thread keeps reading from the
+  ///     loopback HTTP streamer for a brief grace period after the
+  ///     player switches sources. Yanking the handle synchronously
+  ///     from underneath it is exactly the race that produced the
+  ///     "Callback invoked after it has been deleted" crash on
+  ///     Android.
+  ///
+  /// Net effect: handles accumulate inside the native session for the
+  /// app's process lifetime, and the OS reclaims them on process exit.
+  /// Memory cost: ~tens of KB per active swarm, well under the budget.
+  /// A future iteration can add LRU eviction once we ship the
+  /// "currently downloading" management UI.
+  static Future<void> _noopSessionDispose() async {}
+
   /// Poll the native stats endpoint periodically and surface as a stream.
   /// Each poll is a quick FFI call (no blocking I/O) — safe on the UI
   /// isolate.
+  ///
+  /// The stream ends when [_closed] is set (service-level dispose) or
+  /// when the listener cancels their StreamSubscription. We no longer
+  /// gate on _magnetToHandle membership: since track switches reuse
+  /// the same handle, the polling loop has to outlive any individual
+  /// session.
   Stream<TorrentStats> _statsStream(int handle) async* {
     const buf = 1024;
-    while (!_closed && _magnetToHandle.containsValue(handle)) {
+    while (!_closed) {
       final out = calloc<ffi.Char>(buf);
       try {
         final n = _bindings.ltStatsJson(_sessionId, handle, out, buf);

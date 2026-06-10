@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Adaptive-icon foreground layer.
+  Android crops adaptive icons into different masks (circle, squircle,
+  squircle-r, …); only the centre 66 % is guaranteed to be visible. We
+  keep the note + wave inside a ~660px square centred on a 1024 canvas.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Transparent background — the OS provides one via icon_background.xml. -->
+  <g transform="translate(0 -10)">
+    <!-- Note, scaled to fit the safe zone -->
+    <g transform="translate(330 280) scale(0.78)">
+      <rect x="296" y="20" width="40" height="430" rx="14" fill="#FFFFFF"/>
+      <path d="M336 30 C 470 100 510 220 420 320 C 480 220 440 130 336 130 Z"
+            fill="#FFFFFF"/>
+      <ellipse cx="220" cy="440" rx="120" ry="80" fill="#FFFFFF"
+               transform="rotate(-22 220 440)"/>
+    </g>
+    <!-- Wave, shorter than on the legacy icon so it fits inside the
+         circular mask without getting clipped. -->
+    <path d="M 260 740
+             Q 380 680 500 740
+             T 740 740"
+          fill="none" stroke="#FFFFFF" stroke-width="36"
+          stroke-linecap="round" opacity="0.85"/>
+  </g>
+</svg>

@@ -28,10 +28,22 @@ class ResolvedSource {
   final TorrentSession? session;
 }
 
+/// Discriminator so the UI layer can choose a localised message
+/// without having to parse the (English) [NoPlayableSourceError.message].
+enum NoPlayableSourceKind {
+  /// Track has a magnet but the native torrent engine isn't loaded.
+  p2pOnlyEngineMissing,
+  /// Engine is loaded but couldn't fetch metadata / find peers.
+  p2pOnlyOpenFailed,
+  /// No magnet and no httpUrl on this track.
+  noSource,
+}
+
 /// Thrown when a track has no usable source for the current build.
 /// Carries enough context for the UI to show actionable copy.
 class NoPlayableSourceError implements Exception {
-  NoPlayableSourceError({required this.message});
+  NoPlayableSourceError({required this.kind, required this.message});
+  final NoPlayableSourceKind kind;
   final String message;
   @override
   String toString() => message;
@@ -100,19 +112,25 @@ class SourceResolver {
     if (hasMagnet) {
       // Distinguish the two failure modes: native engine absent vs.
       // native engine present but couldn't open the magnet. The
-      // operator's fix is different for each.
-      final reason = torrent.supportsPeerDelivery
-          ? 'the torrent engine could not open this magnet (no metadata, no peers, or invalid magnet)'
-          : 'the torrent engine is not available on this device';
+      // operator's fix is different for each, and the UI layer
+      // localises the message via NoPlayableSourceError.kind.
       throw NoPlayableSourceError(
-        message:
-            'Этот трек доступен только через P2P (magnet), но $reason, '
-            'а HTTP-источника у трека нет. Добавьте streamUrl в админ-панели '
-            'или подождите интеграцию libtorrent (v0.2).',
+        kind: torrent.supportsPeerDelivery
+            ? NoPlayableSourceKind.p2pOnlyOpenFailed
+            : NoPlayableSourceKind.p2pOnlyEngineMissing,
+        message: torrent.supportsPeerDelivery
+            ? 'This track is only available over P2P (magnet), but the '
+                'torrent engine could not open this magnet (no metadata, '
+                'no peers, or invalid magnet), and there is no HTTP source.'
+            : 'This track is only available over P2P (magnet), but the '
+                'torrent engine is not available on this device, and there '
+                'is no HTTP source. Ask the operator to add a streamUrl '
+                'in the admin panel.',
       );
     }
     throw NoPlayableSourceError(
-      message: 'У трека нет ни streamUrl, ни magnet — нечего воспроизводить.',
+      kind: NoPlayableSourceKind.noSource,
+      message: 'This track has no playable source (no streamUrl, no magnet).',
     );
   }
 }

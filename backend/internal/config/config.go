@@ -26,6 +26,11 @@ type Config struct {
 	// in-app deploy guide so users can copy a working URL. It does not
 	// affect routing.
 	PublicURL string
+	// JamendoClientID overrides the default public demo client_id used
+	// by the Jamendo provider. Set this for production deployments so
+	// your traffic is attributed (and rate-limited) against your own
+	// developer account at https://devportal.jamendo.com.
+	JamendoClientID string
 }
 
 // Load reads configuration from environment variables.
@@ -35,9 +40,10 @@ func Load() (*Config, error) {
 		DBPath: getenv("LIBREFY_DB", defaultDBPath()),
 		// Empty by default ⇒ use the seed embedded into the binary.
 		// Set LIBREFY_SEED=/path/to/tracks.json to override at runtime.
-		SeedPath:   os.Getenv("LIBREFY_SEED"),
-		AdminToken: os.Getenv("LIBREFY_ADMIN_TOKEN"),
-		PublicURL:  os.Getenv("LIBREFY_PUBLIC_URL"),
+		SeedPath:        os.Getenv("LIBREFY_SEED"),
+		AdminToken:      os.Getenv("LIBREFY_ADMIN_TOKEN"),
+		PublicURL:       os.Getenv("LIBREFY_PUBLIC_URL"),
+		JamendoClientID: os.Getenv("JAMENDO_CLIENT_ID"),
 	}
 	return cfg, nil
 }

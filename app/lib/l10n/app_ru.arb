@@ -1,0 +1,79 @@
+{
+  "@@locale": "ru",
+
+  "appTitle": "Librefy",
+
+  "navHome": "Главная",
+  "navSearch": "Поиск",
+  "navLibrary": "Библиотека",
+  "navSettings": "Настройки",
+
+  "settingsTitle": "Настройки",
+  "settingsLanguage": "Язык",
+  "settingsLanguageSystem": "Как в системе",
+  "settingsLanguageEnglish": "English",
+  "settingsLanguageRussian": "Русский",
+  "settingsP2P": "Пиринговая доставка (P2P)",
+  "settingsP2PSubtitle": "Некоторые треки приходят от пиров, а не с сервера",
+  "settingsBackendUrl": "Адрес backend",
+  "settingsAbout": "О Librefy",
+  "settingsVersion": "Версия",
+  "settingsPrivacy": "Политика конфиденциальности",
+
+  "p2pIntroTitle": "Пиринговая доставка",
+  "p2pIntroBody": "Librefy умеет проигрывать треки, отдаваемые другими пирами, вместо того чтобы тянуть каждый байт с сервера. Это быстрее в загруженных сетях и бережнее к ресурсам бэкенда.",
+  "p2pIntroMeans": "Что это значит на практике:",
+  "p2pIntroBullet1": "Некоторые треки открываются из swarm через libtorrent.",
+  "p2pIntroBullet2": "Ваше устройство временно раздаёт эти куски обратно.",
+  "p2pIntroBullet3": "Раздаются только треки, помеченные как libre/CC.",
+  "p2pIntroBullet4": "Использование диска и трафика ограничено — см. Настройки.",
+  "p2pIntroEnable": "Включить пиринговую доставку",
+  "p2pIntroContinue": "Продолжить",
+
+  "privacyTitle": "Политика конфиденциальности",
+  "privacyIntro": "Перед тем как продолжить, ознакомьтесь с тем, что происходит с вашими данными:",
+  "privacyDontCollectTitle": "Что мы НЕ собираем",
+  "privacyDontCollect1": "Аккаунтов нет — регистрация не требуется.",
+  "privacyDontCollect2": "Нет рекламных идентификаторов и сторонних SDK-аналитик.",
+  "privacyDontCollect3": "Не отправляем e-mail, номер телефона или контакты.",
+  "privacyServerTitle": "Что уходит на сервер",
+  "privacyServer1": "Запросы каталога к выбранному backend (по умолчанию — официальный сервер Librefy).",
+  "privacyServer2": "Анонимный счётчик прослушиваний трека (без user-id).",
+  "privacyServer3": "Адрес backend можно сменить в Настройках или поднять свой librefyd — тогда данные останутся у вас.",
+  "privacyP2PTitle": "P2P (по желанию)",
+  "privacyP2P1": "Если включить пиринговую доставку, ваш IP временно виден другим участникам раздачи.",
+  "privacyP2P2": "Доступны только треки с лицензиями CC / public domain.",
+  "privacyP2P3": "P2P можно отключить в Настройках в любой момент.",
+  "privacyLocalTitle": "Локально на устройстве",
+  "privacyLocal": "Кэш обложек и торрент-кэш хранятся только на вашем устройстве и удаляются при удалении приложения.",
+  "privacyAcceptHint": "Нажимая «Принять и продолжить», вы соглашаетесь с описанной выше обработкой данных.",
+  "privacyExit": "Выйти",
+  "privacyAccept": "Принять и продолжить",
+
+  "playerNowPlaying": "Сейчас играет",
+  "playerQueue": "Очередь",
+  "playerShuffle": "Перемешать",
+  "playerRepeat": "Повтор",
+
+  "trackLikeAdd": "В избранное",
+  "trackLikeRemove": "Убрать из избранного",
+  "trackDownload": "Скачать",
+  "trackAddToPlaylist": "Добавить в плейлист",
+
+  "downloadSaved": "Сохранено в {path}",
+  "@downloadSaved": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "downloadFailed": "Не удалось скачать: {error}",
+  "@downloadFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+
+  "errorP2POnlyEngineMissing": "Этот трек доступен только через P2P (magnet), но движок торрентов недоступен на этом устройстве, а HTTP-источника у трека нет. Попросите оператора добавить streamUrl в админ-панели.",
+  "errorP2POnlyOpenFailed": "Этот трек доступен только через P2P (magnet), но движок не смог открыть magnet (нет метаданных, пиров или ссылка некорректна), а HTTP-источника у трека нет.",
+  "errorNoSource": "У трека нет ни streamUrl, ни magnet — нечего воспроизводить."
+}

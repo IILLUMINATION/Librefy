@@ -37,3 +37,11 @@ librefy.db*
 /app/linux/libs/*.so
 /app/android/app/src/main/jniLibs/*/*.so
 /app/android/app/src/main/jniLibs/*/*.h
+
+# Android signing material. The upload keystore for Play Store is
+# stored at the repo root for convenience but MUST NEVER be committed
+# — losing or rotating it locks the app out of Play Console updates.
+# Same for the gradle properties file that holds its password.
+/*.jks
+/*.keystore
+/app/android/key.properties

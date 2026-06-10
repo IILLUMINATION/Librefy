@@ -201,8 +201,17 @@ $("#importUrlBtn").addEventListener("click", async () => {
 // ---------- Tracklist import (compilation albums) ----------
 
 function openTracklistImport(parsed) {
-  $("#modalTitle").textContent =
-    `Import tracklist (${parsed.tracks.length} tracks)`;
+  // Audiobook releases are surfaced with the "audiobook" tag set on
+  // the parsed result. We use that to (a) relabel the modal so the
+  // operator knows what they're committing to, and (b) wrap every
+  // imported chapter into a fresh playlist post-import so the mobile
+  // client can play the book back as a single ordered sequence
+  // instead of N orphan tracks scattered across the catalogue.
+  const isAudiobook =
+    Array.isArray(parsed.tags) && parsed.tags.includes("audiobook");
+  $("#modalTitle").textContent = isAudiobook
+    ? `Import audiobook (${parsed.tracks.length} chapters)`
+    : `Import tracklist (${parsed.tracks.length} tracks)`;
   const rows = parsed.tracks
     .map((t, i) => `
       <tr>
@@ -282,9 +291,39 @@ function openTracklistImport(parsed) {
 
     try {
       const r = await api.post("/tracks/bulk", { tracks });
+      // Audiobook bonus: create a playlist that bundles all imported
+      // chapters in order. We do this AFTER the bulk-track upsert so
+      // we know the IDs landed; if the playlist upsert fails the
+      // tracks themselves are still safe in the catalogue and the
+      // operator can group them manually.
+      if (isAudiobook && r.ok > 0) {
+        const playlistID =
+          "audiobook-" + releaseSlug + "-" + Math.random().toString(36).slice(2, 6);
+        const playlistPayload = {
+          id: playlistID,
+          title: parsed.album || parsed.title || "Audiobook",
+          description: parsed.artist
+            ? `Аудиокнига · ${parsed.artist}`
+            : "Аудиокнига",
+          artworkUrl: parsed.artworkUrl || "",
+          curated: false,
+          trackIds: tracks.map(t => "catalog:" + t.id),
+        };
+        try {
+          await api.post("/playlists", {
+            ...playlistPayload,
+            // The admin endpoint expects {Playlist..., trackIds: [...]} —
+            // see adminHandlers.upsertPlaylist. trackIds is a top-level
+            // sibling of the Playlist fields in the JSON body.
+          });
+        } catch (plErr) {
+          console.warn("playlist create failed (tracks still imported):", plErr);
+        }
+      }
       closeModal();
       alert(`Imported: ${r.ok} ok, ${r.failed} failed` +
-        (r.errors?.length ? "\n\n" + r.errors.slice(0, 5).join("\n") : ""));
+        (r.errors?.length ? "\n\n" + r.errors.slice(0, 5).join("\n") : "") +
+        (isAudiobook ? "\n\nAudiobook playlist created." : ""));
       loadTracks();
       loadStats();
     } catch (err) {

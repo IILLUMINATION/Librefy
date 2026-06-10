@@ -18,16 +18,19 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'application/audio/audio_providers.dart';
 import 'application/library/user_library.dart';
+import 'application/state/locale_provider.dart';
 import 'application/state/providers.dart';
 import 'core/network/api_base_url_store.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/librefy_theme.dart';
+import 'l10n/app_localizations.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -82,6 +85,7 @@ class _RootBootstrap extends StatelessWidget {
           overrides: [
             apiBaseUrlStoreProvider.overrideWithValue(urlStore),
             sharedPreferencesProvider.overrideWithValue(prefs),
+            localeProvider.overrideWith((_) => LocaleNotifier(prefs)),
           ],
           child: const LibrefyApp(),
         );
@@ -139,6 +143,7 @@ class _LibrefyAppState extends ConsumerState<LibrefyApp> {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
+    final locale = ref.watch(localeProvider);
     return DynamicColorBuilder(
       builder: (lightDyn, darkDyn) {
         final lightScheme = lightDyn ??
@@ -152,6 +157,10 @@ class _LibrefyAppState extends ConsumerState<LibrefyApp> {
           theme: LibrefyTheme.light(lightScheme),
           darkTheme: LibrefyTheme.dark(darkScheme),
           routerConfig: router,
+          // null locale = follow system; otherwise force the user choice.
+          locale: locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
         );
       },
     );

@@ -26,6 +26,7 @@ import (
 	httpapi "github.com/librefy/librefy/backend/internal/http"
 	"github.com/librefy/librefy/backend/internal/providers/catalog"
 	"github.com/librefy/librefy/backend/internal/providers/ia"
+	"github.com/librefy/librefy/backend/internal/providers/jamendo"
 	"github.com/librefy/librefy/backend/internal/service"
 )
 
@@ -59,12 +60,25 @@ func main() {
 	// Build providers. The official build ships only with libre-safe providers.
 	// External/community providers can be added via plugins later; they are
 	// the responsibility of the operator who enables them.
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+
 	catalogProv := catalog.New(database)
-	iaProv := ia.New(&http.Client{Timeout: 10 * time.Second})
+	iaProv := ia.New(httpClient)
+	jamendoProv := jamendo.New(httpClient, cfg.JamendoClientID)
 
 	registry := service.NewProviderRegistry()
 	registry.Register(catalogProv)
 	registry.Register(iaProv)
+	// Only wire Jamendo in if an operator-provided client_id is set —
+	// otherwise it would just slow every search down by a network
+	// round-trip and return nothing. The instruction for getting an ID
+	// is in docs/DEPLOY.md and the in-app deploy guide.
+	if jamendoProv.Enabled() {
+		registry.Register(jamendoProv)
+		logger.Info("jamendo provider enabled")
+	} else {
+		logger.Info("jamendo provider disabled (set JAMENDO_CLIENT_ID to enable)")
+	}
 
 	svc := service.New(registry, database)
 

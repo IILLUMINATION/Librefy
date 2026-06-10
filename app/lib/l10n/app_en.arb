@@ -1,0 +1,79 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "Librefy",
+
+  "navHome": "Home",
+  "navSearch": "Search",
+  "navLibrary": "Library",
+  "navSettings": "Settings",
+
+  "settingsTitle": "Settings",
+  "settingsLanguage": "Language",
+  "settingsLanguageSystem": "System default",
+  "settingsLanguageEnglish": "English",
+  "settingsLanguageRussian": "Русский",
+  "settingsP2P": "Peer-assisted delivery (P2P)",
+  "settingsP2PSubtitle": "Some tracks are streamed from peers instead of a server",
+  "settingsBackendUrl": "Backend URL",
+  "settingsAbout": "About Librefy",
+  "settingsVersion": "Version",
+  "settingsPrivacy": "Privacy policy",
+
+  "p2pIntroTitle": "Peer-assisted streaming",
+  "p2pIntroBody": "Librefy can play tracks delivered through peers instead of downloading every byte from a server. It's faster on busy networks and respects the project's lightweight backend ethic.",
+  "p2pIntroMeans": "What this means in practice:",
+  "p2pIntroBullet1": "Some tracks open from a swarm via libtorrent.",
+  "p2pIntroBullet2": "Your device temporarily shares those pieces back.",
+  "p2pIntroBullet3": "Only tracks the operator marked as libre/CC are eligible.",
+  "p2pIntroBullet4": "Disk + bandwidth usage is bounded; see Settings.",
+  "p2pIntroEnable": "Enable peer delivery",
+  "p2pIntroContinue": "Continue",
+
+  "privacyTitle": "Privacy policy",
+  "privacyIntro": "Before you continue, take a look at what happens with your data:",
+  "privacyDontCollectTitle": "What we DON'T collect",
+  "privacyDontCollect1": "No accounts — registration is not required.",
+  "privacyDontCollect2": "No advertising IDs or third-party analytics SDKs.",
+  "privacyDontCollect3": "We don't send your email, phone number, or contacts.",
+  "privacyServerTitle": "What goes to the server",
+  "privacyServer1": "Catalog requests to the selected backend (default is the official Librefy server).",
+  "privacyServer2": "Anonymous per-track play counter (no user-id).",
+  "privacyServer3": "You can change the backend in Settings or run your own librefyd — then everything stays with you.",
+  "privacyP2PTitle": "P2P (optional)",
+  "privacyP2P1": "If you enable peer delivery, your IP is briefly visible to other swarm participants.",
+  "privacyP2P2": "Only CC / public-domain tracks are eligible.",
+  "privacyP2P3": "P2P can be turned off in Settings at any time.",
+  "privacyLocalTitle": "Locally on the device",
+  "privacyLocal": "Cover-art and torrent caches stay only on your device and are removed when the app is uninstalled.",
+  "privacyAcceptHint": "By tapping \"Accept and continue\" you agree to the data handling described above.",
+  "privacyExit": "Quit",
+  "privacyAccept": "Accept and continue",
+
+  "playerNowPlaying": "Now playing",
+  "playerQueue": "Queue",
+  "playerShuffle": "Shuffle",
+  "playerRepeat": "Repeat",
+
+  "trackLikeAdd": "Add to Liked",
+  "trackLikeRemove": "Remove from Liked",
+  "trackDownload": "Download",
+  "trackAddToPlaylist": "Add to playlist",
+
+  "downloadSaved": "Saved to {path}",
+  "@downloadSaved": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "downloadFailed": "Download failed: {error}",
+  "@downloadFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+
+  "errorP2POnlyEngineMissing": "This track is only available over P2P (magnet), but the torrent engine is not available on this device, and there is no HTTP source. Ask the operator to add a streamUrl in the admin panel.",
+  "errorP2POnlyOpenFailed": "This track is only available over P2P (magnet), but the torrent engine couldn't open this magnet (no metadata, no peers, or invalid magnet), and there is no HTTP source.",
+  "errorNoSource": "This track has no playable source (no streamUrl, no magnet)."
+}

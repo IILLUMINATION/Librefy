@@ -4,12 +4,27 @@
 //   - Pointer to the in-app self-hosting guide.
 //   - About / licensing notice.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../application/state/locale_provider.dart';
 import '../../application/state/providers.dart';
+import '../../l10n/app_localizations.dart';
 import '../common/p2p_intro_dialog.dart';
+import '../common/welcome_intro_dialog.dart';
+
+/// Public repository URL. Shown in Settings → About; tapping the row
+/// copies it to the clipboard. We deliberately do NOT pull in
+/// url_launcher just for this — that's a whole platform plugin to ship
+/// one outbound link, and Play Console flags the package_visibility
+/// queries it ships with.
+const _kRepoUrl = 'https://github.com/IILLUMINATION/Librefy';
+
+/// Public Telegram channel for project announcements / community chat.
+/// Same rationale as [_kRepoUrl] for not using url_launcher.
+const _kTelegramUrl = 'https://t.me/librefy';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -32,6 +47,69 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.dispose();
   }
 
+  Future<void> _copyLink(
+      BuildContext context, String url, String confirmation) async {
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(confirmation),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  String _languageLabel(String? code, AppLocalizations l) {
+    switch (code) {
+      case 'en':
+        return l.settingsLanguageEnglish;
+      case 'ru':
+        return l.settingsLanguageRussian;
+      default:
+        return l.settingsLanguageSystem;
+    }
+  }
+
+  Future<void> _pickLanguage(
+      BuildContext context, WidgetRef ref, AppLocalizations l) async {
+    final current = ref.read(localeProvider)?.languageCode;
+    // We need to distinguish "the user picked the 'follow system' radio,
+    // which we encode as null" from "the user dismissed the dialog by
+    // tapping outside, in which case we change nothing". showDialog<T>
+    // returns null on outside-tap; wrap each selection in a one-element
+    // list so the discriminator is unambiguous.
+    final picked = await showDialog<List<String?>>(
+      context: context,
+      builder: (ctx) {
+        return SimpleDialog(
+          title: Text(l.settingsLanguage),
+          children: [
+            RadioListTile<String?>(
+              value: null,
+              groupValue: current,
+              title: Text(l.settingsLanguageSystem),
+              onChanged: (v) => Navigator.of(ctx).pop(<String?>[v]),
+            ),
+            RadioListTile<String?>(
+              value: 'en',
+              groupValue: current,
+              title: Text(l.settingsLanguageEnglish),
+              onChanged: (v) => Navigator.of(ctx).pop(<String?>[v]),
+            ),
+            RadioListTile<String?>(
+              value: 'ru',
+              groupValue: current,
+              title: Text(l.settingsLanguageRussian),
+              onChanged: (v) => Navigator.of(ctx).pop(<String?>[v]),
+            ),
+          ],
+        );
+      },
+    );
+    if (picked == null || !context.mounted) return;
+    await ref.read(localeProvider.notifier).set(picked.first);
+  }
+
   Future<void> _applyUrl() async {
     final v = _urlCtrl.text.trim();
     if (v.isEmpty) return;
@@ -50,11 +128,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l = AppLocalizations.of(context)!;
+    final currentLocale = ref.watch(localeProvider);
     return CustomScrollView(
       slivers: [
-        const SliverAppBar.medium(title: Text('Settings')),
+        SliverAppBar.medium(title: Text(l.settingsTitle)),
         SliverList(
           delegate: SliverChildListDelegate.fixed([
+            ListTile(
+              leading: const Icon(Icons.language_rounded),
+              title: Text(l.settingsLanguage),
+              subtitle: Text(_languageLabel(currentLocale?.languageCode, l)),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => _pickLanguage(context, ref, l),
+            ),
+            const Divider(),
             const ListTile(
               title: Text('Backend'),
               subtitle: Text('Where this app fetches metadata from.'),
@@ -107,13 +195,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               },
             ),
             const Divider(),
-            const ListTile(
-              leading: Icon(Icons.info_outline_rounded),
-              title: Text('About Librefy'),
-              subtitle: Text(
-                'Privacy-first, libre/free music streaming. '
-                'Catalog limited to Creative Commons / public-domain content.',
+            ListTile(
+              leading: const Icon(Icons.info_outline_rounded),
+              title: const Text('About Librefy'),
+              subtitle: const Text(
+                'A privacy-first catalog of freely-redistributable music '
+                '(Creative Commons / public-domain). Like Nextcloud for '
+                'music: you can use the public catalog, or run your own '
+                'librefyd in 10 minutes and own everything end-to-end.',
               ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              // Re-open the full welcome card so existing users (who
+              // already dismissed it on first launch) can re-read it.
+              // showWelcomeIntroAlways unconditionally pops the dialog
+              // without checking the "seen" flag.
+              onTap: () => showWelcomeIntroAlways(context),
             ),
             ListTile(
               leading: const Icon(Icons.policy_outlined),
@@ -123,6 +219,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 'libre licence are not surfaced by the official catalog.',
                 style: TextStyle(color: scheme.onSurfaceVariant),
               ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.code_rounded),
+              title: const Text('Source code'),
+              subtitle: Text(
+                _kRepoUrl,
+                style: TextStyle(color: scheme.onSurfaceVariant),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: const Icon(Icons.copy_rounded),
+              onTap: () => _copyLink(context, _kRepoUrl,
+                  'Repository URL copied to clipboard'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.send_rounded),
+              title: const Text('Telegram channel'),
+              subtitle: Text(
+                _kTelegramUrl,
+                style: TextStyle(color: scheme.onSurfaceVariant),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: const Icon(Icons.copy_rounded),
+              onTap: () => _copyLink(context, _kTelegramUrl,
+                  'Telegram link copied to clipboard'),
             ),
           ]),
         ),

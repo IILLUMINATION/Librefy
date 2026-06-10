@@ -10,6 +10,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
 
   # State management — Riverpod (no code-gen in MVP, hand-written providers).
   flutter_riverpod: ^2.5.1
@@ -49,6 +52,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true
   # We must declare at least one asset, otherwise Flutter doesn't
   # generate AssetManifest.bin and google_fonts crashes on startup
   # trying to read it. The README placeholder keeps the manifest alive

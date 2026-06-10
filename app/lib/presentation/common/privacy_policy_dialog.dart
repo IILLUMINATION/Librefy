@@ -12,6 +12,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../l10n/app_localizations.dart';
+
 const _kAcceptedVersionKey = 'librefy.privacy.acceptedVersion.v1';
 
 /// Current policy revision. Increment when the wording materially
@@ -68,13 +70,14 @@ class _PolicyDialogState extends ConsumerState<_PolicyDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final l = AppLocalizations.of(context)!;
     return PopScope(
       // Block hardware/system back gestures — the user must make an
       // explicit choice.
       canPop: false,
       child: AlertDialog(
         icon: const Icon(Icons.privacy_tip_outlined, size: 32),
-        title: const Text('Политика конфиденциальности'),
+        title: Text(l.privacyTitle),
         content: SizedBox(
           width: 480,
           child: SingleChildScrollView(
@@ -82,51 +85,32 @@ class _PolicyDialogState extends ConsumerState<_PolicyDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Librefy — приватный проигрыватель свободной музыки. '
-                  'Перед тем как продолжить, ознакомьтесь с тем, что '
-                  'происходит с вашими данными:',
-                  style: theme.textTheme.bodyMedium,
-                ),
+                Text(l.privacyIntro, style: theme.textTheme.bodyMedium),
                 const SizedBox(height: 12),
-                Text('Что мы НЕ собираем',
+                Text(l.privacyDontCollectTitle,
                     style: theme.textTheme.titleSmall),
                 const SizedBox(height: 4),
-                const _Bullet('Аккаунтов нет — регистрация не требуется.'),
-                const _Bullet(
-                    'Нет рекламных идентификаторов и сторонних SDK-аналитик.'),
-                const _Bullet(
-                    'Не отправляем e-mail, номер телефона или контакты.'),
+                _Bullet(l.privacyDontCollect1),
+                _Bullet(l.privacyDontCollect2),
+                _Bullet(l.privacyDontCollect3),
                 const SizedBox(height: 12),
-                Text('Что уходит на сервер',
+                Text(l.privacyServerTitle,
                     style: theme.textTheme.titleSmall),
                 const SizedBox(height: 4),
-                const _Bullet(
-                    'Запросы каталога к выбранному backend (по умолчанию '
-                    'http://194.31.223.9:8088).'),
-                const _Bullet(
-                    'Анонимный счётчик прослушиваний трека (без user-id).'),
-                const _Bullet(
-                    'Адрес backend можно сменить в Настройках или поднять '
-                    'свой librefyd — тогда данные останутся у вас.'),
+                _Bullet(l.privacyServer1),
+                _Bullet(l.privacyServer2),
+                _Bullet(l.privacyServer3),
                 const SizedBox(height: 12),
-                Text('P2P (по желанию)',
+                Text(l.privacyP2PTitle, style: theme.textTheme.titleSmall),
+                const SizedBox(height: 4),
+                _Bullet(l.privacyP2P1),
+                _Bullet(l.privacyP2P2),
+                _Bullet(l.privacyP2P3),
+                const SizedBox(height: 12),
+                Text(l.privacyLocalTitle,
                     style: theme.textTheme.titleSmall),
                 const SizedBox(height: 4),
-                const _Bullet(
-                    'Если включить пиринговую доставку, ваш IP временно '
-                    'виден другим участникам раздачи.'),
-                const _Bullet(
-                    'Доступны только треки с лицензиями CC/public domain.'),
-                const _Bullet(
-                    'P2P можно отключить в Настройках в любой момент.'),
-                const SizedBox(height: 12),
-                Text('Локально на устройстве',
-                    style: theme.textTheme.titleSmall),
-                const SizedBox(height: 4),
-                const _Bullet(
-                    'Кэш обложек и торрент-кэш хранятся только на вашем '
-                    'устройстве и удаляются при удалении приложения.'),
+                _Bullet(l.privacyLocal),
                 const SizedBox(height: 16),
                 Container(
                   padding:
@@ -135,11 +119,8 @@ class _PolicyDialogState extends ConsumerState<_PolicyDialog> {
                     color: scheme.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Text(
-                    'Нажимая «Принять и продолжить», вы соглашаетесь с '
-                    'описанной выше обработкой данных.',
-                    style: theme.textTheme.bodySmall,
-                  ),
+                  child: Text(l.privacyAcceptHint,
+                      style: theme.textTheme.bodySmall),
                 ),
               ],
             ),
@@ -148,11 +129,11 @@ class _PolicyDialogState extends ConsumerState<_PolicyDialog> {
         actions: [
           TextButton(
             onPressed: _busy ? null : _quit,
-            child: const Text('Выйти'),
+            child: Text(l.privacyExit),
           ),
           FilledButton(
             onPressed: _busy ? null : _accept,
-            child: const Text('Принять и продолжить'),
+            child: Text(l.privacyAccept),
           ),
         ],
       ),

@@ -175,9 +175,51 @@ func (p *Parser) Parse(ctx context.Context, rawURL string) (*Result, error) {
 		}
 	}
 
-	// --- tracklist (compilation / album) ---
+	// --- classify: audiobook vs. music ---
+	// The classifier looks at the subforum the topic lives in (most
+	// reliable), the topic title, and the post body. We need to do
+	// this BEFORE parsing the tracklist because the rules for "what
+	// counts as a track row" differ between music and spoken content.
+	var bodyText string
 	if body2 != nil {
-		res.Tracks = extractTracklist(textOf(body2))
+		bodyText = textOf(body2)
+	}
+	kind := classifyKind(title, bodyText, doc)
+
+	switch kind {
+	case KindAudiobook:
+		// Audiobook: parse chapters with the permissive chapter
+		// grammar (no Artist - Title requirement) and surface a
+		// matching tag so the client renders an audiobook badge.
+		if bodyText != "" {
+			res.Tracks = extractChapters(bodyText)
+		}
+		res.Tags = append(res.Tags, "audiobook")
+		// Promote narrator / author into top-level fields when the
+		// post carries them under a recognised label. We've already
+		// captured them in RawMetadata via extractKVPairs.
+		if narrator := pickFirst(res.RawMetadata,
+			"Чтец", "Читает", "Начитал", "Озвучивает", "Narrator"); narrator != "" {
+			res.RawMetadata["Narrator"] = narrator
+			// If we don't have an Artist yet, use the narrator —
+			// that matches how audiobook stores normally display
+			// the credit on the cover.
+			if res.Artist == "" {
+				res.Artist = narrator
+			}
+		}
+		if author := pickFirst(res.RawMetadata,
+			"Автор", "Author"); author != "" {
+			res.RawMetadata["Author"] = author
+			if res.Album == "" {
+				res.Album = author
+			}
+		}
+	default:
+		// Music: existing strict tracklist parser.
+		if body2 != nil {
+			res.Tracks = extractTracklist(bodyText)
+		}
 	}
 
 	if res.Magnet == "" {

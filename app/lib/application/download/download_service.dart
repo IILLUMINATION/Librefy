@@ -133,10 +133,9 @@ class DownloadService {
   }
 
   static Future<String> _resolveDestination(String fileName) async {
-    // Prefer ~/Music/Librefy on Linux desktop. Fall back to the app's
-    // private support directory (Android, sandboxed environments).
     Directory? base;
     if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
+      // Prefer ~/Music/Librefy on desktop.
       final home = Platform.environment['HOME'] ??
           Platform.environment['USERPROFILE'];
       if (home != null) {
@@ -145,6 +144,38 @@ class DownloadService {
           await candidate.create(recursive: true);
           base = candidate;
         } catch (_) {/* fall through */}
+      }
+    } else if (Platform.isAndroid) {
+      // On Android we want files to land somewhere the user can find in
+      // their Files app. /storage/emulated/0/Music/Librefy works on
+      // every Android we support (API 21+) for the *app's own* writes
+      // because we declare WRITE_EXTERNAL_STORAGE for legacy devices and
+      // because writing to public Music/Movies/Downloads is allowed for
+      // the app's own files even under scoped storage as long as the
+      // path is /Music or /Download. If that path is unwritable for any
+      // reason (locked-down OEM, encrypted device, …) we fall back to
+      // the external-files dir (Android/data/<pkg>/files/Music) which
+      // is also visible in Files and needs no permissions.
+      try {
+        final candidate = Directory('/storage/emulated/0/Music/Librefy');
+        await candidate.create(recursive: true);
+        // Probe writability with a small sentinel file rather than
+        // trusting create() — some OEMs let mkdir succeed but block
+        // file creation.
+        final probe = File('${candidate.path}/.librefy_probe');
+        await probe.writeAsString('ok', flush: true);
+        await probe.delete();
+        base = candidate;
+      } catch (_) {/* fall through to scoped external dir */}
+      if (base == null) {
+        final ext = await getExternalStorageDirectory();
+        if (ext != null) {
+          final candidate = Directory('${ext.path}/Music/Librefy');
+          try {
+            await candidate.create(recursive: true);
+            base = candidate;
+          } catch (_) {/* fall through */}
+        }
       }
     }
     base ??= Directory('${(await getApplicationSupportDirectory()).path}/downloads');
