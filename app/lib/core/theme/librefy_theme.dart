@@ -41,7 +41,11 @@ class LibrefyTheme {
       brightness: brightness,
       scaffoldBackgroundColor: scheme.surface,
       textTheme: textTheme,
-      splashFactory: InkSparkle.splashFactory,
+      // InkSparkle relies on shaders/ink_sparkle.frag which requires a
+      // specific Flutter asset bundle setup. The classic InkRipple looks
+      // identical for our purposes and works on every platform without
+      // bundling a shader.
+      splashFactory: InkRipple.splashFactory,
       visualDensity: VisualDensity.standard,
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.surface,
