@@ -46,8 +46,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # When you add files under assets/, list them here, e.g.:
-  #   assets:
-  #     - assets/icon.png
-  # An empty `assets:` entry prevents Flutter from generating
-  # AssetManifest.bin, which then breaks google_fonts at runtime.
+  # We must declare at least one asset, otherwise Flutter doesn't
+  # generate AssetManifest.bin and google_fonts crashes on startup
+  # trying to read it. The README placeholder keeps the manifest alive
+  # until we have real assets to bundle.
+  assets:
+    - assets/README.md

@@ -23,9 +23,18 @@ class LibrefyTheme {
   static ThemeData dark(ColorScheme scheme) => _base(scheme, Brightness.dark);
 
   static ThemeData _base(ColorScheme scheme, Brightness brightness) {
-    final textTheme = GoogleFonts.interTextTheme(
-      ThemeData(brightness: brightness).textTheme,
-    );
+    final fallback = ThemeData(brightness: brightness).textTheme;
+    // google_fonts probes the local AssetBundle before falling back to a
+    // network fetch. On hot-restart with stale build artefacts that probe
+    // can throw "Unable to load AssetManifest.bin" — catch it so the app
+    // still boots with the platform default font instead of a white
+    // screen.
+    TextTheme textTheme;
+    try {
+      textTheme = GoogleFonts.interTextTheme(fallback);
+    } catch (_) {
+      textTheme = fallback;
+    }
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,

@@ -3,6 +3,7 @@
 // single-purpose; widgets depend on the narrowest possible slice.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/network/api_base_url_store.dart';
 import '../../core/network/api_config.dart';
 import '../../data/datasources/librefy_api.dart';
 import '../../data/repositories/catalog_repository_impl.dart';
@@ -11,11 +12,40 @@ import '../../domain/entities/search_result.dart';
 import '../../domain/entities/track.dart';
 import '../../domain/repositories/catalog_repository.dart';
 
-/// API base URL — the user can override it from Settings at runtime.
-/// We seed it with the build-time default (Android emulator host on
-/// Android, 127.0.0.1 elsewhere; see ApiConfig).
+/// SharedPreferences-backed store for the API base URL.
+/// Overridden in main.dart with the actual instance once SharedPreferences
+/// has been initialised; throws if accessed before that.
+final apiBaseUrlStoreProvider = Provider<ApiBaseUrlStore>((ref) {
+  throw UnimplementedError('apiBaseUrlStoreProvider must be overridden in main');
+});
+
+/// The API base URL the app talks to. Persisted across restarts via
+/// [ApiBaseUrlStore]; falls back to [ApiConfig.defaultBaseUrl] when no
+/// value has been saved yet (first launch, fresh install).
 final apiBaseUrlProvider =
-    StateProvider<String>((ref) => ApiConfig.defaultBaseUrl());
+    NotifierProvider<ApiBaseUrlNotifier, String>(ApiBaseUrlNotifier.new);
+
+class ApiBaseUrlNotifier extends Notifier<String> {
+  @override
+  String build() {
+    final store = ref.watch(apiBaseUrlStoreProvider);
+    return store.load() ?? ApiConfig.defaultBaseUrl();
+  }
+
+  /// Update the URL and persist it.
+  Future<void> set(String url) async {
+    final v = url.trim();
+    if (v.isEmpty || v == state) return;
+    state = v;
+    await ref.read(apiBaseUrlStoreProvider).save(v);
+  }
+
+  /// Reset to the build-time default and forget the saved value.
+  Future<void> resetToDefault() async {
+    state = ApiConfig.defaultBaseUrl();
+    await ref.read(apiBaseUrlStoreProvider).clear();
+  }
+}
 
 final _apiProvider = Provider<LibrefyApi>((ref) {
   final base = ref.watch(apiBaseUrlProvider);

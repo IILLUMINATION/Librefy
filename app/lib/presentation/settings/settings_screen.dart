@@ -30,17 +30,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.dispose();
   }
 
-  void _applyUrl() {
+  Future<void> _applyUrl() async {
     final v = _urlCtrl.text.trim();
     if (v.isEmpty) return;
-    ref.read(apiBaseUrlProvider.notifier).state = v;
+    await ref.read(apiBaseUrlProvider.notifier).set(v);
     // Drop cached repository / API client so the next fetch goes to the
     // new origin.
     ref.invalidate(catalogRepositoryProvider);
     ref.invalidate(featuredPlaylistsProvider);
     ref.invalidate(trendingTracksProvider);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Backend URL set to $v')),
+      SnackBar(content: Text('Saved: $v')),
     );
   }
 

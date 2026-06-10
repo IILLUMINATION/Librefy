@@ -12,7 +12,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'application/state/providers.dart';
+import 'core/network/api_base_url_store.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/librefy_theme.dart';
 
@@ -25,7 +28,20 @@ Future<void> main() async {
   // Wires the bundled libmpv binaries into the process. Safe & idempotent.
   MediaKit.ensureInitialized();
 
-  runApp(const ProviderScope(child: LibrefyApp()));
+  // SharedPreferences must be ready before the first widget that
+  // consumes apiBaseUrlProvider builds, otherwise we'd flash the
+  // build-time default before swapping to the persisted value.
+  final prefs = await SharedPreferences.getInstance();
+  final urlStore = ApiBaseUrlStore(prefs);
+
+  runApp(
+    ProviderScope(
+      overrides: [
+        apiBaseUrlStoreProvider.overrideWithValue(urlStore),
+      ],
+      child: const LibrefyApp(),
+    ),
+  );
 }
 
 class LibrefyApp extends ConsumerWidget {
