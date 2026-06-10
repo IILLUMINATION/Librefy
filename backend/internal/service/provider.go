@@ -47,6 +47,9 @@ type StreamInfo struct {
 	Magnet string `json:"magnet,omitempty"`
 	// InfoHash, if known, lets clients deduplicate swarms.
 	InfoHash string `json:"infoHash,omitempty"`
+	// FileIndex tells the torrent client WHICH file inside the swarm
+	// to stream. Defaults to 0 (the first audio file) for legacy rows.
+	FileIndex int `json:"fileIndex"`
 	// MimeType helps clients pick the right decoder without sniffing.
 	MimeType string `json:"mimeType,omitempty"`
 }

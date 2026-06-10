@@ -17,7 +17,7 @@ func scanTracks(rows *sql.Rows) ([]domain.Track, error) {
 		var album, artwork, streamURL, magnet, infoHash, licURL, attr, tagsJSON sql.NullString
 		if err := rows.Scan(
 			&t.ID, &t.Title, &t.Artist, &album, &t.DurationMS, &artwork,
-			&streamURL, &magnet, &infoHash,
+			&streamURL, &magnet, &infoHash, &t.FileIndex,
 			&t.License.Code, &t.License.Name, &licURL, &attr,
 			&tagsJSON, &t.Provider, &t.AddedAt,
 		); err != nil {

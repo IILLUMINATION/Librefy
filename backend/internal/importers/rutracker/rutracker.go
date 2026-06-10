@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,11 @@ import (
 )
 
 // Result mirrors the shape of the admin Track upsert endpoint.
+//
+// When the topic represents a compilation / album, [Tracks] holds the
+// parsed tracklist; [Title]/[Artist]/[Album] describe the release as
+// a whole. For single-track releases, [Tracks] is empty and the
+// top-level fields describe the one and only track.
 type Result struct {
 	Title       string            `json:"title"`
 	Artist      string            `json:"artist"`
@@ -41,6 +47,23 @@ type Result struct {
 	Tags        []string          `json:"tags,omitempty"`
 	Source      string            `json:"source"`
 	RawMetadata map[string]string `json:"rawMetadata,omitempty"`
+
+	// Tracks is the parsed tracklist when the release is a compilation
+	// or multi-track album. Each entry maps to one Track row in the DB,
+	// sharing the same magnet and info-hash but with its own FileIndex.
+	Tracks []TrackEntry `json:"tracks,omitempty"`
+}
+
+// TrackEntry is a single song parsed from the topic body's tracklist.
+type TrackEntry struct {
+	// FileIndex is the zero-based position of this track in the torrent's
+	// file list (when files are ordered by name). The libtorrent bridge
+	// uses it to serve the right audio file from the swarm.
+	FileIndex  int    `json:"fileIndex"`
+	Position   int    `json:"position"` // 1-based ordinal as printed on the page
+	Title      string `json:"title"`
+	Artist     string `json:"artist"`
+	DurationMS int64  `json:"durationMs,omitempty"`
 }
 
 // Parser fetches and parses a single rutracker topic URL.
@@ -152,6 +175,11 @@ func (p *Parser) Parse(ctx context.Context, rawURL string) (*Result, error) {
 		}
 	}
 
+	// --- tracklist (compilation / album) ---
+	if body2 != nil {
+		res.Tracks = extractTracklist(textOf(body2))
+	}
+
 	if res.Magnet == "" {
 		return nil, errors.New("no magnet link found on page")
 	}
@@ -159,6 +187,100 @@ func (p *Parser) Parse(ctx context.Context, rawURL string) (*Result, error) {
 		res.Title = "Untitled"
 	}
 	return res, nil
+}
+
+// trackLinePattern matches lines like:
+//
+//	"01. Artist - Title (Original Mix) [7:12]"
+//	"1.  Artist feat. X - Title [03:45]"
+//	"01 - Artist - Title"            (no brackets)
+//	"01) Artist – Title [6:31]"      (en-dash)
+//
+// Position is required so we don't pick up random hyphenated lines from
+// the post body. Duration in brackets is optional.
+var trackLinePattern = regexp.MustCompile(
+	`^\s*(\d{1,3})\s*[.):\-]\s+(.+?)\s+[-–—]\s+(.+?)\s*(?:\[\s*(\d{1,3}):(\d{2})(?::(\d{2}))?\s*\])?\s*$`,
+)
+
+// htmlEntities the tracklist parser needs to undo because the input
+// originates from textOf(node) which preserves them.
+var htmlEntityReplacer = strings.NewReplacer(
+	"&amp;", "&",
+	"&#39;", "'",
+	"&quot;", `"`,
+	"&lt;", "<",
+	"&gt;", ">",
+	"&nbsp;", " ",
+)
+
+// extractTracklist scans the post body for a numbered tracklist and
+// returns the parsed entries. We assume the file order in the torrent
+// follows the tracklist order (this is overwhelmingly the convention
+// on rutracker audio uploads); FileIndex is therefore set to Position-1
+// as a sane default. The client may override it after listing the
+// torrent's actual file table.
+func extractTracklist(body string) []TrackEntry {
+	body = htmlEntityReplacer.Replace(body)
+	lines := strings.Split(body, "\n")
+
+	var out []TrackEntry
+	var lastPos int
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || len(line) > 300 {
+			continue
+		}
+		m := trackLinePattern.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		pos, _ := strconv.Atoi(m[1])
+		// Skip nonsense (positions must be roughly sequential and small).
+		if pos <= 0 || pos > 500 {
+			continue
+		}
+		// Avoid picking up date-like patterns or random "1 - foo" lines:
+		// require positions to roughly ascend with at most a small jump.
+		if pos > lastPos+5 && lastPos > 0 {
+			continue
+		}
+		artist := strings.TrimSpace(m[2])
+		title := strings.TrimSpace(m[3])
+		if artist == "" || title == "" || len(artist) > 120 || len(title) > 200 {
+			continue
+		}
+		var durMs int64
+		if m[4] != "" && m[5] != "" {
+			h, mm, ss := 0, 0, 0
+			if m[6] != "" {
+				h, _ = strconv.Atoi(m[4])
+				mm, _ = strconv.Atoi(m[5])
+				ss, _ = strconv.Atoi(m[6])
+			} else {
+				mm, _ = strconv.Atoi(m[4])
+				ss, _ = strconv.Atoi(m[5])
+			}
+			durMs = int64((h*3600 + mm*60 + ss) * 1000)
+		}
+		out = append(out, TrackEntry{
+			Position:   pos,
+			FileIndex:  pos - 1,
+			Title:      title,
+			Artist:     artist,
+			DurationMS: durMs,
+		})
+		lastPos = pos
+	}
+
+	// Sanity check: at least 2 entries, and positions cover a contiguous
+	// run from 1. Otherwise we probably matched noise.
+	if len(out) < 2 {
+		return nil
+	}
+	if out[0].Position != 1 {
+		return nil
+	}
+	return out
 }
 
 // ------------------ HTML helpers ------------------

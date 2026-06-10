@@ -46,8 +46,21 @@ func Open(path string) (*sql.DB, error) {
 	return conn, nil
 }
 
-// Migrate applies embedded SQL migrations in lexical order.
+// Migrate applies embedded SQL migrations in lexical order, tracking
+// which ones have already run via the schema_migrations bookkeeping
+// table. Each migration runs at most once per database; idempotent
+// across restarts.
 func Migrate(conn *sql.DB) error {
+	// Bootstrap the bookkeeping table. We can't put this in a regular
+	// migration file because we'd need it before we can track migrations.
+	if _, err := conn.Exec(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            name       TEXT PRIMARY KEY,
+            applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )`); err != nil {
+		return fmt.Errorf("bootstrap migrations: %w", err)
+	}
+
 	entries, err := fs.ReadDir(migrationsFS, "migrations")
 	if err != nil {
 		return fmt.Errorf("read migrations: %w", err)
@@ -60,7 +73,15 @@ func Migrate(conn *sql.DB) error {
 	}
 	sort.Strings(names)
 
+	applied, err := loadAppliedMigrations(conn)
+	if err != nil {
+		return err
+	}
+
 	for _, name := range names {
+		if applied[name] {
+			continue
+		}
 		body, err := fs.ReadFile(migrationsFS, "migrations/"+name)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", name, err)
@@ -68,9 +89,59 @@ func Migrate(conn *sql.DB) error {
 		if _, err := conn.Exec(string(body)); err != nil {
 			return fmt.Errorf("apply %s: %w", name, err)
 		}
+		if _, err := conn.Exec(
+			`INSERT INTO schema_migrations(name) VALUES (?)`, name,
+		); err != nil {
+			return fmt.Errorf("record %s: %w", name, err)
+		}
 		slog.Info("migration applied", "file", name)
 	}
 	return nil
+}
+
+func loadAppliedMigrations(conn *sql.DB) (map[string]bool, error) {
+	out := map[string]bool{}
+	rows, err := conn.Query(`SELECT name FROM schema_migrations`)
+	if err != nil {
+		return nil, fmt.Errorf("load applied: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		out[n] = true
+	}
+	// Backfill: if the catalog table already exists but the bookkeeping
+	// is empty, the DB was created before this tracker was added — mark
+	// the initial migration as applied so we don't try to re-create
+	// existing tables (CREATE IF NOT EXISTS would be silent, but adding
+	// columns isn't). The presence of `tracks` indicates a v0.1 DB.
+	if len(out) == 0 {
+		var hasTracks int
+		_ = conn.QueryRow(
+			`SELECT 1 FROM sqlite_master WHERE type='table' AND name='tracks'`,
+		).Scan(&hasTracks)
+		if hasTracks == 1 {
+			_, _ = conn.Exec(
+				`INSERT INTO schema_migrations(name) VALUES ('0001_init.sql')`)
+			out["0001_init.sql"] = true
+			// If the column already exists too, the v0.2 migration is a no-op
+			// but we still need to mark it as applied to be idempotent on
+			// next boots.
+			var hasFileIndex int
+			_ = conn.QueryRow(
+				`SELECT 1 FROM pragma_table_info('tracks') WHERE name='file_index'`,
+			).Scan(&hasFileIndex)
+			if hasFileIndex == 1 {
+				_, _ = conn.Exec(
+					`INSERT INTO schema_migrations(name) VALUES ('0002_file_index.sql')`)
+				out["0002_file_index.sql"] = true
+			}
+		}
+	}
+	return out, nil
 }
 
 // SeedIfEmpty loads tracks/playlists into the catalog when the tracks
@@ -159,13 +230,13 @@ func insertTrack(tx *sql.Tx, t domain.Track) error {
 	_, err := tx.Exec(`
         INSERT INTO tracks (
             id, title, artist, album, duration_ms, artwork_url,
-            stream_url, magnet, info_hash,
+            stream_url, magnet, info_hash, file_index,
             license_code, license_name, license_url, attribution,
             tags_json, provider, added_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, COALESCE(?, CURRENT_TIMESTAMP))
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, COALESCE(?, CURRENT_TIMESTAMP))
     `,
 		t.ID, t.Title, t.Artist, t.Album, t.DurationMS, t.ArtworkURL,
-		t.StreamURL, t.Magnet, t.InfoHash,
+		t.StreamURL, t.Magnet, t.InfoHash, t.FileIndex,
 		t.License.Code, t.License.Name, t.License.URL, t.Attribution,
 		string(tags), t.Provider, nullableTime(t.AddedAt),
 	)

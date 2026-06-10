@@ -127,7 +127,7 @@ func (s *Service) Trending(ctx context.Context, limit int) ([]domain.Track, erro
 	}
 	rows, err := s.db.QueryContext(ctx, `
         SELECT t.id, t.title, t.artist, t.album, t.duration_ms, t.artwork_url,
-               t.stream_url, t.magnet, t.info_hash,
+               t.stream_url, t.magnet, t.info_hash, t.file_index,
                t.license_code, t.license_name, t.license_url, t.attribution,
                t.tags_json, t.provider, t.added_at
         FROM tracks t
@@ -189,7 +189,7 @@ func (s *Service) PlaylistTracks(ctx context.Context, namespacedID string) (doma
 
 	rows, err := s.db.QueryContext(ctx, `
         SELECT t.id, t.title, t.artist, t.album, t.duration_ms, t.artwork_url,
-               t.stream_url, t.magnet, t.info_hash,
+               t.stream_url, t.magnet, t.info_hash, t.file_index,
                t.license_code, t.license_name, t.license_url, t.attribution,
                t.tags_json, t.provider, t.added_at
         FROM tracks t

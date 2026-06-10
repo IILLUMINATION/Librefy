@@ -55,8 +55,9 @@ class TorrentStats {
 
 abstract class TorrentService {
   /// Starts (or attaches to) the swarm identified by [magnet] and returns
-  /// a [TorrentSession] whose [localUri] can be fed to the player.
-  Future<TorrentSession> openMagnet(String magnet);
+  /// a [TorrentSession] streaming the file at [fileIndex] (0-based).
+  /// For single-file torrents pass 0.
+  Future<TorrentSession> openMagnet(String magnet, {int fileIndex = 0});
 
   /// Whether this implementation actually performs peer-assisted delivery.
   /// HTTP-only stubs return false so the resolver can fall back gracefully.
@@ -73,7 +74,7 @@ class HttpOnlyTorrentService implements TorrentService {
   bool get supportsPeerDelivery => false;
 
   @override
-  Future<TorrentSession> openMagnet(String magnet) {
+  Future<TorrentSession> openMagnet(String magnet, {int fileIndex = 0}) {
     throw UnsupportedError(
       'Peer-assisted delivery is not available in this build. '
       'Use the HTTP fallback URL instead.',

@@ -34,8 +34,12 @@ type Track struct {
 	// Magnet is a magnet URI for peer-assisted delivery. Empty if not available.
 	Magnet string `json:"magnet,omitempty"`
 	// InfoHash is the torrent info-hash (hex), if known.
-	InfoHash string  `json:"infoHash,omitempty"`
-	License  License `json:"license"`
+	InfoHash string `json:"infoHash,omitempty"`
+	// FileIndex is the zero-based audio-file index inside the torrent.
+	// Lets one magnet back many tracks (compilations, albums). For a
+	// single-file torrent this is just 0.
+	FileIndex int     `json:"fileIndex"`
+	License   License `json:"license"`
 	// Attribution is the required credit string per CC-BY style licenses.
 	Attribution string    `json:"attribution,omitempty"`
 	Tags        []string  `json:"tags,omitempty"`

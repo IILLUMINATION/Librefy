@@ -30,7 +30,7 @@ func (p *Provider) Search(ctx context.Context, query string, limit int) (domain.
 	q := "%" + strings.ToLower(strings.TrimSpace(query)) + "%"
 	rows, err := p.db.QueryContext(ctx, `
         SELECT id, title, artist, album, duration_ms, artwork_url,
-               stream_url, magnet, info_hash,
+               stream_url, magnet, info_hash, file_index,
                license_code, license_name, license_url, attribution,
                tags_json, provider, added_at
         FROM tracks
@@ -53,7 +53,7 @@ func (p *Provider) Search(ctx context.Context, query string, limit int) (domain.
 func (p *Provider) GetTrack(ctx context.Context, id string) (domain.Track, error) {
 	rows, err := p.db.QueryContext(ctx, `
         SELECT id, title, artist, album, duration_ms, artwork_url,
-               stream_url, magnet, info_hash,
+               stream_url, magnet, info_hash, file_index,
                license_code, license_name, license_url, attribution,
                tags_json, provider, added_at
         FROM tracks WHERE id = ? LIMIT 1`, id)
@@ -78,10 +78,11 @@ func (p *Provider) ResolveStream(ctx context.Context, id string) (service.Stream
 		return service.StreamInfo{}, err
 	}
 	info := service.StreamInfo{
-		HTTPURL:  t.StreamURL,
-		Magnet:   t.Magnet,
-		InfoHash: t.InfoHash,
-		MimeType: "audio/mpeg",
+		HTTPURL:   t.StreamURL,
+		Magnet:    t.Magnet,
+		InfoHash:  t.InfoHash,
+		FileIndex: t.FileIndex,
+		MimeType:  "audio/mpeg",
 	}
 	if info.HTTPURL == "" && info.Magnet == "" {
 		return service.StreamInfo{}, errors.New("track has no playable source")

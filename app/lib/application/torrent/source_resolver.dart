@@ -44,7 +44,10 @@ class SourceResolver {
 
     if (hasMagnet && _torrent.supportsPeerDelivery) {
       try {
-        final session = await _torrent.openMagnet(info.magnet!);
+        final session = await _torrent.openMagnet(
+          info.magnet!,
+          fileIndex: info.fileIndex,
+        );
         return ResolvedSource(
           uri: session.localUri,
           usingP2P: true,

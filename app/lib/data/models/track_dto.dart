@@ -93,17 +93,20 @@ class StreamInfoDto {
       : httpUrl = json['httpUrl'] as String?,
         magnet = json['magnet'] as String?,
         infoHash = json['infoHash'] as String?,
+        fileIndex = (json['fileIndex'] as num?)?.toInt() ?? 0,
         mimeType = json['mimeType'] as String? ?? 'audio/mpeg';
 
   final String? httpUrl;
   final String? magnet;
   final String? infoHash;
+  final int fileIndex;
   final String mimeType;
 
   StreamInfo toDomain() => StreamInfo(
         httpUrl: httpUrl,
         magnet: magnet,
         infoHash: infoHash,
+        fileIndex: fileIndex,
         mimeType: mimeType,
       );
 }

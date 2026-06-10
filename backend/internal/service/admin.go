@@ -30,7 +30,7 @@ func (s *Service) AdminListTracks(ctx context.Context, limit, offset int) ([]dom
 	}
 	rows, err := s.db.QueryContext(ctx, `
         SELECT id, title, artist, album, duration_ms, artwork_url,
-               stream_url, magnet, info_hash,
+               stream_url, magnet, info_hash, file_index,
                license_code, license_name, license_url, attribution,
                tags_json, provider, added_at
         FROM tracks
@@ -101,10 +101,10 @@ func (s *Service) AdminUpsertTrack(ctx context.Context, t domain.Track) error {
 	_, err := s.db.ExecContext(ctx, `
         INSERT INTO tracks (
             id, title, artist, album, duration_ms, artwork_url,
-            stream_url, magnet, info_hash,
+            stream_url, magnet, info_hash, file_index,
             license_code, license_name, license_url, attribution,
             tags_json, provider, added_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET
             title=excluded.title,
             artist=excluded.artist,
@@ -114,6 +114,7 @@ func (s *Service) AdminUpsertTrack(ctx context.Context, t domain.Track) error {
             stream_url=excluded.stream_url,
             magnet=excluded.magnet,
             info_hash=excluded.info_hash,
+            file_index=excluded.file_index,
             license_code=excluded.license_code,
             license_name=excluded.license_name,
             license_url=excluded.license_url,
@@ -121,7 +122,7 @@ func (s *Service) AdminUpsertTrack(ctx context.Context, t domain.Track) error {
             tags_json=excluded.tags_json
     `,
 		t.ID, t.Title, t.Artist, t.Album, t.DurationMS, t.ArtworkURL,
-		t.StreamURL, t.Magnet, t.InfoHash,
+		t.StreamURL, t.Magnet, t.InfoHash, t.FileIndex,
 		t.License.Code, t.License.Name, t.License.URL, t.Attribution,
 		string(tags), t.Provider, t.AddedAt,
 	)

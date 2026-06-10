@@ -9,12 +9,16 @@ class StreamInfo {
     this.httpUrl,
     this.magnet,
     this.infoHash,
+    this.fileIndex = 0,
     this.mimeType = 'audio/mpeg',
   });
 
   final String? httpUrl;
   final String? magnet;
   final String? infoHash;
+  /// Which audio file inside the torrent to serve. 0-based; defaults to
+  /// 0 for single-file releases.
+  final int fileIndex;
   final String mimeType;
 
   bool get hasAnySource =>

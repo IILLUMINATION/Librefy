@@ -75,7 +75,7 @@ class LibtorrentService implements TorrentService {
   bool get supportsPeerDelivery => !_closed;
 
   @override
-  Future<TorrentSession> openMagnet(String magnet) async {
+  Future<TorrentSession> openMagnet(String magnet, {int fileIndex = 0}) async {
     if (_closed) {
       throw StateError('LibtorrentService is disposed');
     }
@@ -86,13 +86,9 @@ class LibtorrentService implements TorrentService {
         throw Exception('lt_add_magnet failed: ${_bindings.lastError()}');
       }
       _magnetToHandle[magnet] = handle;
-      dev.log('added magnet (handle=$handle), waiting for metadata…', name: _logTag);
+      dev.log('added magnet (handle=$handle), file=$fileIndex, waiting for metadata…',
+          name: _logTag);
 
-      // Off the main isolate would be ideal, but our Go side does the
-      // wait in its own goroutines — the cgo call only blocks the
-      // calling thread, not Dart's event loop in practice (Dart FFI
-      // releases the message loop while a blocking FFI call runs as
-      // long as the target is leaf-safe).
       final fileCount = await Future(() {
         return _bindings.ltWaitMetadata(
           _sessionId,
@@ -106,10 +102,15 @@ class LibtorrentService implements TorrentService {
       }
       dev.log('got metadata: $fileCount files', name: _logTag);
 
-      // Always serve the first file. We could heuristically pick a
-      // .mp3/.flac in the future but anacrolix already sorts by index
-      // and music torrents typically have audio first.
-      final urlPtr = _bindings.ltStreamUrl(_sessionId, handle, 0);
+      // Clamp out-of-range file indices so a stale DB row can't ask the
+      // native side for a non-existent file (which would 404 forever).
+      final pickIdx = fileIndex.clamp(0, fileCount - 1);
+      if (pickIdx != fileIndex) {
+        dev.log('  fileIndex $fileIndex out of range, clamped to $pickIdx',
+            name: _logTag);
+      }
+
+      final urlPtr = _bindings.ltStreamUrl(_sessionId, handle, pickIdx);
       if (urlPtr.address == 0) {
         throw Exception('stream_url: ${_bindings.lastError()}');
       }
